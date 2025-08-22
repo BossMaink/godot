@@ -255,6 +255,7 @@ Node *EditorSceneFormatImporterBlend::import_scene(const String &p_path, uint32_
 	if (p_options.has(SNAME("blender/animation/group_tracks")) && p_options[SNAME("blender/animation/group_tracks")]) {
 		if (blender_major_version > 3 || (blender_major_version == 3 && blender_minor_version >= 6)) {
 			parameters_map["export_animation_mode"] = "ACTIONS";
+			parameters_map["export_merge_animation"] = "NLA_TRACK";
 		} else {
 			parameters_map["export_nla_strips"] = true;
 		}
