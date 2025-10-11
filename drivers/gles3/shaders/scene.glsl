@@ -467,13 +467,10 @@ uniform highp vec3 compressed_aabb_size;
 uniform highp vec4 uv_scale;
 uniform highp uint instance_offset;
 uniform highp uint layer_mask;
-<<<<<<< HEAD
-=======
 
 #if defined(RENDER_MOTION_VECTORS)
 uniform highp mat4 prev_world_transform;
 #endif
->>>>>>> cb7cd815eeeb11aaa1f68453a515c76bec5ba73d
 
 uniform highp uint model_flags;
 
@@ -818,11 +815,7 @@ void vertex_shader(vec4 vertex_angle_attrib_input,
 	specular_light_interp = vec3(0.0);
 #ifdef BASE_PASS
 #ifndef DISABLE_LIGHT_DIRECTIONAL
-<<<<<<< HEAD
-	for (uint i = uint(0); i < scene_data.directional_light_count; i++) {
-=======
 	for (uint i = uint(0); i < scene_data_input.directional_light_count; i++) {
->>>>>>> cb7cd815eeeb11aaa1f68453a515c76bec5ba73d
 		if (!bool(directional_lights[i].mask & layer_mask)) {
 			continue;
 		}
@@ -1230,10 +1223,6 @@ struct DirectionalLightData {
 	lowp uint enabled_bake_mode;
 	mediump float shadow_opacity;
 	mediump float specular;
-<<<<<<< HEAD
-	highp vec3 pad;
-=======
->>>>>>> cb7cd815eeeb11aaa1f68453a515c76bec5ba73d
 	highp uint mask;
 };
 
@@ -2390,11 +2379,7 @@ void main() {
 #else
 
 #ifndef DISABLE_LIGHT_DIRECTIONAL
-<<<<<<< HEAD
-	for (uint i = uint(0); i < scene_data.directional_light_count; i++) {
-=======
 	for (uint i = uint(0); i < scene_data_block.data.directional_light_count; i++) {
->>>>>>> cb7cd815eeeb11aaa1f68453a515c76bec5ba73d
 		if (!bool(directional_lights[i].mask & layer_mask)) {
 			continue;
 		}
