@@ -35,6 +35,7 @@
 #include "core/input/input.h"
 #include "core/os/keyboard.h"
 #include "core/os/os.h"
+#include "scene/gui/graph_element.h"
 #include "scene/gui/menu_bar.h"
 #include "scene/gui/panel_container.h"
 #include "scene/main/timer.h"
@@ -119,6 +120,9 @@ RID PopupMenu::bind_global_menu() {
 				RID submenu_rid = item.submenu->bind_global_menu();
 				nmenu->set_item_submenu(global_menu, index, submenu_rid);
 				item.submenu_bound = true;
+				if (item.submenu->is_connected("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden))) {
+					item.submenu->disconnect("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden));
+				}
 			}
 			if (item.checkable_type == Item::CHECKABLE_TYPE_CHECK_BOX) {
 				nmenu->set_item_checkable(global_menu, index, true);
@@ -134,8 +138,8 @@ RID PopupMenu::bind_global_menu() {
 			nmenu->set_item_tooltip(global_menu, index, item.tooltip);
 			if (!item.shortcut_is_disabled && item.shortcut.is_valid() && item.shortcut->has_valid_event()) {
 				Array events = item.shortcut->get_events();
-				for (int j = 0; j < events.size(); j++) {
-					Ref<InputEventKey> ie = events[j];
+				for (const Variant &v : events) {
+					Ref<InputEventKey> ie = v;
 					if (ie.is_valid() && _set_item_accelerator(index, ie)) {
 						break;
 					}
@@ -348,8 +352,10 @@ int PopupMenu::_get_mouse_over(const Point2 &p_over) const {
 void PopupMenu::_activate_submenu(int p_over, bool p_by_keyboard) {
 	ERR_FAIL_INDEX_MSG(p_over, items.size(), vformat("Invalid submenu index %d in _activate_submenu.", p_over));
 	PopupMenu *submenu_popup = items[p_over].submenu;
-	ERR_FAIL_COND_MSG(submenu_popup->is_visible(), vformat("_activate_submenu should not be called on an open submenu - index: %d.", p_over));
-
+	if (submenu_popup->is_visible()) {
+		WARN_VERBOSE(vformat("_activate_submenu should not be called on an open submenu - index: %d.", p_over));
+		return;
+	}
 	submenu_popup->this_submenu_index = p_over;
 	active_submenu_index = p_over;
 
@@ -713,6 +719,7 @@ void PopupMenu::_input_from_window_internal(const Ref<InputEvent> &p_event) {
 
 		if (this_submenu_index != -1) { // Is a submenu.
 			PopupMenu *parent_popup = Object::cast_to<PopupMenu>(get_parent());
+			ERR_FAIL_NULL(parent_popup);
 			Point2 areas_mouse_pos = get_mouse_position() - parent_popup->panel_offset_start;
 			for (const Rect2 &E : autohide_areas) {
 				if (!scroll_container->get_global_rect().has_point(m->get_position()) && E.has_point(areas_mouse_pos)) {
@@ -1009,13 +1016,13 @@ void PopupMenu::_draw_items() {
 				if (theme_cache.font_outline_size > 0 && theme_cache.font_outline_color.a > 0) {
 					items[i].text_buf->draw_outline(ci, text_pos, theme_cache.font_outline_size, theme_cache.font_outline_color);
 				}
-				items[i].text_buf->draw(ci, text_pos, items[i].disabled ? theme_cache.font_disabled_color : ((active_submenu_index == -1 && i == mouse_over) || i == active_submenu_index ? theme_cache.font_hover_color : theme_cache.font_color));
+				items[i].text_buf->draw(ci, text_pos, items[i].disabled ? theme_cache.font_disabled_color : (((active_submenu_index == -1 && i == mouse_over) || i == active_submenu_index) ? theme_cache.font_hover_color : theme_cache.font_color));
 			} else {
 				Vector2 text_pos = item_ofs + Point2(0, Math::floor((h - items[i].text_buf->get_size().y) / 2.0));
 				if (theme_cache.font_outline_size > 0 && theme_cache.font_outline_color.a > 0) {
 					items[i].text_buf->draw_outline(ci, text_pos, theme_cache.font_outline_size, theme_cache.font_outline_color);
 				}
-				items[i].text_buf->draw(ci, text_pos, items[i].disabled ? theme_cache.font_disabled_color : ((active_submenu_index == -1 && i == mouse_over) || i == active_submenu_index ? theme_cache.font_hover_color : theme_cache.font_color));
+				items[i].text_buf->draw(ci, text_pos, items[i].disabled ? theme_cache.font_disabled_color : (((active_submenu_index == -1 && i == mouse_over) || i == active_submenu_index) ? theme_cache.font_hover_color : theme_cache.font_color));
 			}
 		}
 
@@ -1030,7 +1037,7 @@ void PopupMenu::_draw_items() {
 			if (theme_cache.font_outline_size > 0 && theme_cache.font_outline_color.a > 0) {
 				items[i].accel_text_buf->draw_outline(ci, text_pos, theme_cache.font_outline_size, theme_cache.font_outline_color);
 			}
-			items[i].accel_text_buf->draw(ci, text_pos, i == mouse_over ? theme_cache.font_hover_color : theme_cache.font_accelerator_color);
+			items[i].accel_text_buf->draw(ci, text_pos, ((active_submenu_index == -1 && i == mouse_over) || i == active_submenu_index) ? theme_cache.font_hover_color : theme_cache.font_accelerator_color);
 		}
 
 		// Cache the item vertical offset from the first item and the height.
@@ -1052,6 +1059,7 @@ void PopupMenu::_close_pressed() {
 void PopupMenu::_close_or_suspend() {
 	if (this_submenu_index != -1) { // Is a submenu.
 		PopupMenu *parent_popup = Object::cast_to<PopupMenu>(get_parent());
+		ERR_FAIL_NULL(parent_popup);
 		Point2 mouse_pos = is_embedded() ? parent_popup->get_mouse_position() : Point2(DisplayServer::get_singleton()->mouse_get_position() - parent_popup->get_position());
 		if (parent_popup->_get_mouse_over(mouse_pos) == this_submenu_index) {
 			parent_popup->submenu_mouse_exited_ticks_msec = -1;
@@ -1461,6 +1469,7 @@ void PopupMenu::_notification(int p_what) {
 			// Only used when using operating system windows, and only on submenus.
 			if (!activated_by_keyboard && !is_embedded() && autohide_areas.size() && this_submenu_index != -1) {
 				PopupMenu *parent_popup = Object::cast_to<PopupMenu>(get_parent());
+				ERR_FAIL_NULL(parent_popup);
 				const float win_scale = get_content_scale_factor();
 				Point2 mouse_pos = DisplayServer::get_singleton()->mouse_get_position() - get_position();
 				Point2 areas_mouse_pos = mouse_pos - parent_popup->panel_offset_start;
@@ -1475,6 +1484,8 @@ void PopupMenu::_notification(int p_what) {
 
 		case NOTIFICATION_VISIBILITY_CHANGED: {
 			if (!is_visible()) {
+				this_submenu_index = -1;
+
 				if (mouse_over >= 0) {
 					prev_mouse_over = mouse_over;
 					mouse_over = -1;
@@ -1919,13 +1930,14 @@ void PopupMenu::add_submenu_node_item(const String &p_label, PopupMenu *p_submen
 		RID submenu_rid = p_submenu->bind_global_menu();
 		nmenu->set_item_submenu(global_menu, index, submenu_rid);
 		items.write[index].submenu_bound = true;
+	} else if (!p_submenu->is_connected("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden))) {
+		p_submenu->connect("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden));
 	}
 
 	_shape_item(items.size() - 1);
 	queue_accessibility_update();
 	control->queue_redraw();
 
-	p_submenu->connect("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden));
 	child_controls_changed();
 	notify_property_list_changed();
 	_menu_changed();
@@ -2215,8 +2227,9 @@ void PopupMenu::set_item_submenu_node(int p_idx, PopupMenu *p_submenu) {
 			NativeMenu::get_singleton()->set_item_submenu(global_menu, p_idx, submenu_rid);
 			items.write[p_idx].submenu_bound = true;
 		}
+	} else if (!p_submenu->is_connected("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden))) {
+		p_submenu->connect("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden));
 	}
-	p_submenu->connect("popup_hide", callable_mp(this, &PopupMenu::_submenu_hidden));
 	control->queue_redraw();
 	child_controls_changed();
 	_menu_changed();
@@ -2238,8 +2251,14 @@ void PopupMenu::_close_suspended_timeout() {
 
 void PopupMenu::_submenu_hidden() {
 	// Ensure the submenu_timer is not running to avoid any race conditions between opening and closing submenus.
-	ERR_FAIL_COND_MSG(!submenu_timer->is_stopped(), "The submenu_timer should never be running when the _submenu_hidden signal is emitted.");
-	ERR_FAIL_COND_MSG(active_submenu_index == -1, "The active_submenu_index should never be -1 when _submenu_hidden is entered.");
+	if (!submenu_timer->is_stopped()) {
+		WARN_VERBOSE("The submenu_timer should never be running when the _submenu_hidden signal is emitted.");
+		return;
+	}
+	if (active_submenu_index == -1) {
+		WARN_VERBOSE("The active_submenu_index should never be -1 when _submenu_hidden is entered.");
+		return;
+	}
 	active_submenu_index = -1;
 	submenu_over = -1;
 	submenu_mouse_exited_ticks_msec = -1;
@@ -2971,7 +2990,26 @@ void PopupMenu::_unref_shortcut(Ref<Shortcut> p_sc) {
 
 void PopupMenu::_shortcut_changed() {
 	for (int i = 0; i < items.size(); i++) {
-		items.write[i].dirty = true;
+		Item &item = items.write[i];
+		item.dirty = true;
+		if (global_menu.is_valid() && !item.separator) {
+			NativeMenu *nmenu = NativeMenu::get_singleton();
+			nmenu->set_item_accelerator(global_menu, i, Key::NONE);
+			if (!item.shortcut_is_disabled && item.shortcut.is_valid() && item.shortcut->has_valid_event()) {
+				Array events = item.shortcut->get_events();
+				for (const Variant &v : events) {
+					Ref<InputEventKey> ie = v;
+					if (ie.is_valid() && _set_item_accelerator(i, ie)) {
+						break;
+					}
+				}
+				if (item.shortcut_is_global) {
+					nmenu->set_item_key_callback(global_menu, i, callable_mp(this, &PopupMenu::activate_item));
+				} else {
+					nmenu->set_item_key_callback(global_menu, i, Callable());
+				}
+			}
+		}
 	}
 	control->queue_redraw();
 }
@@ -3316,7 +3354,7 @@ String PopupMenu::_atr(int p_idx, const String &p_text) const {
 	ERR_FAIL_V_MSG(atr(p_text), "Unexpected auto translate mode: " + itos(items[p_idx].auto_translate_mode));
 }
 
-void PopupMenu::popup(const Rect2i &p_bounds) {
+void PopupMenu::_popup_base(const Rect2i &p_bounds) {
 	bool native = global_menu.is_valid();
 #ifdef TOOLS_ENABLED
 	if (is_part_of_edited_scene()) {
@@ -3335,17 +3373,34 @@ void PopupMenu::popup(const Rect2i &p_bounds) {
 		moved = Vector2();
 		popup_time_msec = OS::get_singleton()->get_ticks_msec();
 
-		Popup::popup(p_bounds);
+		Popup::_popup_base(p_bounds);
 	}
 }
 
 void PopupMenu::_pre_popup() {
-	Size2 scale = get_force_native() ? get_parent_viewport()->get_popup_base_transform_native().get_scale() : get_parent_viewport()->get_popup_base_transform().get_scale();
-	CanvasItem *c = Object::cast_to<CanvasItem>(get_parent());
-	if (c) {
-		scale *= c->get_global_transform_with_canvas().get_scale();
+	real_t popup_scale = 1.0;
+	bool scale_with_parent = true;
+
+	// Disable content scaling to avoid too tiny or too big menus when using GraphEdit zoom, applied only if menu is a child of GraphElement.
+	Node *p = get_parent();
+	while (p) {
+		GraphElement *ge = Object::cast_to<GraphElement>(p);
+		if (ge) {
+			scale_with_parent = ge->is_scaling_menus();
+			break;
+		}
+		p = p->get_parent();
 	}
-	real_t popup_scale = MIN(scale.x, scale.y);
+
+	if (scale_with_parent && p) {
+		Size2 scale = get_force_native() ? get_parent_viewport()->get_popup_base_transform_native().get_scale() : get_parent_viewport()->get_popup_base_transform().get_scale();
+		CanvasItem *c = Object::cast_to<CanvasItem>(get_parent());
+		if (c) {
+			scale *= c->get_global_transform_with_canvas().get_scale();
+		}
+		popup_scale = MIN(scale.x, scale.y);
+	}
+
 	set_content_scale_factor(popup_scale);
 	if (is_wrapping_controls()) {
 		Size2 minsize = get_contents_minimum_size() * popup_scale;

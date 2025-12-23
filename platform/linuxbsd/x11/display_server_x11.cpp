@@ -1878,7 +1878,18 @@ void DisplayServerX11::screen_set_keep_on(bool p_enable) {
 		return;
 	}
 
-	if (screensaver) {
+	if (portal_desktop && portal_desktop->is_inhibit_supported()) {
+		if (p_enable) {
+			// Attach the inhibit request to the main window, not the last focused window,
+			// on the basis that inhibiting the screensaver is global state for the application.
+			WindowID window_id = MAIN_WINDOW_ID;
+			String xid = vformat("x11:%x", (uint64_t)windows[window_id].x11_window);
+			keep_screen_on = portal_desktop->inhibit(xid);
+		} else {
+			portal_desktop->uninhibit();
+			keep_screen_on = false;
+		}
+	} else if (screensaver) {
 		if (p_enable) {
 			screensaver->inhibit();
 		} else {
@@ -2456,9 +2467,11 @@ void DisplayServerX11::_update_motif_wm_hints(WindowID p_window) {
 	WindowData &wd = windows[p_window];
 
 	MotifWmHints hints = {};
-	hints.flags = MWM_HINTS_DECORATIONS | MWM_HINTS_FUNCTIONS;
+	hints.flags = MWM_HINTS_DECORATIONS;
 
 	if (!wd.borderless) {
+		hints.flags |= MWM_HINTS_FUNCTIONS;
+
 		hints.decorations = MWM_DECOR_BORDER | MWM_DECOR_MENU | MWM_DECOR_TITLE;
 		hints.functions = MWM_FUNC_MOVE | MWM_FUNC_CLOSE;
 
@@ -4506,7 +4519,7 @@ Bool DisplayServerX11::_predicate_all_events(Display *display, XEvent *event, XP
 	return True;
 }
 
-bool DisplayServerX11::_wait_for_events() const {
+bool DisplayServerX11::_wait_for_events(int timeout_seconds, int timeout_microseconds) const {
 	int x11_fd = ConnectionNumber(x11_display);
 	fd_set in_fds;
 
@@ -4516,8 +4529,8 @@ bool DisplayServerX11::_wait_for_events() const {
 	FD_SET(x11_fd, &in_fds);
 
 	struct timeval tv;
-	tv.tv_usec = 0;
-	tv.tv_sec = 1;
+	tv.tv_sec = timeout_seconds;
+	tv.tv_usec = timeout_microseconds;
 
 	// Wait for next event or timeout.
 	int num_ready_fds = select(x11_fd + 1, &in_fds, nullptr, nullptr, &tv);
@@ -4536,7 +4549,8 @@ bool DisplayServerX11::_wait_for_events() const {
 
 void DisplayServerX11::_poll_events() {
 	while (!events_thread_done.is_set()) {
-		_wait_for_events();
+		// Wait with a shorter timeout from the events thread to avoid delayed inputs.
+		_wait_for_events(0, 1000);
 
 		// Process events from the queue.
 		{
