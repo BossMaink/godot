@@ -38,6 +38,7 @@
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
 #include "core/math/geometry_2d.h"
+#include "core/math/geometry_3d.h"
 #include "editor/file_system/editor_paths.h"
 #include "editor/settings/editor_settings.h"
 #include "servers/rendering/rendering_device_binds.h"
@@ -980,6 +981,7 @@ LightmapperRD::BakeError LightmapperRD::_denoise(RenderingDevice *p_rd, Ref<RDSh
 	denoise_params.normal_bandwidth = 0.1f;
 	denoise_params.filter_strength = 10.0f;
 	denoise_params.half_search_window = p_denoiser_range;
+	denoise_params.slice_count = p_bake_sh ? 4 : 1;
 	p_rd->buffer_update(denoise_params_buffer, 0, sizeof(DenoiseParams), &denoise_params);
 
 	Vector<RD::Uniform> uniforms = dilate_or_denoise_common_uniforms(p_source_light_tex, p_dest_light_tex);
@@ -1167,19 +1169,19 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 	RID shadowmask_tex;
 	RID shadowmask_tex2;
 
-#define FREE_TEXTURES                    \
-	rd->free_rid(albedo_array_tex);      \
-	rd->free_rid(emission_array_tex);    \
-	rd->free_rid(normal_tex);            \
-	rd->free_rid(position_tex);          \
-	rd->free_rid(unocclude_tex);         \
-	rd->free_rid(light_source_tex);      \
-	rd->free_rid(light_accum_tex2);      \
-	rd->free_rid(light_accum_tex);       \
+#define FREE_TEXTURES \
+	rd->free_rid(albedo_array_tex); \
+	rd->free_rid(emission_array_tex); \
+	rd->free_rid(normal_tex); \
+	rd->free_rid(position_tex); \
+	rd->free_rid(unocclude_tex); \
+	rd->free_rid(light_source_tex); \
+	rd->free_rid(light_accum_tex2); \
+	rd->free_rid(light_accum_tex); \
 	rd->free_rid(light_environment_tex); \
-	if (p_bake_shadowmask) {             \
-		rd->free_rid(shadowmask_tex);    \
-		rd->free_rid(shadowmask_tex2);   \
+	if (p_bake_shadowmask) { \
+		rd->free_rid(shadowmask_tex); \
+		rd->free_rid(shadowmask_tex2); \
 	}
 
 	{ // create all textures
@@ -1284,16 +1286,16 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 	Vector<int> slice_seam_count;
 
-#define FREE_BUFFERS                       \
-	rd->free_rid(bake_parameters_buffer);  \
-	rd->free_rid(vertex_buffer);           \
-	rd->free_rid(triangle_buffer);         \
-	rd->free_rid(lights_buffer);           \
+#define FREE_BUFFERS \
+	rd->free_rid(bake_parameters_buffer); \
+	rd->free_rid(vertex_buffer); \
+	rd->free_rid(triangle_buffer); \
+	rd->free_rid(lights_buffer); \
 	rd->free_rid(triangle_indices_buffer); \
-	rd->free_rid(cluster_indices_buffer);  \
-	rd->free_rid(cluster_aabbs_buffer);    \
-	rd->free_rid(grid_texture);            \
-	rd->free_rid(seams_buffer);            \
+	rd->free_rid(cluster_indices_buffer); \
+	rd->free_rid(cluster_aabbs_buffer); \
+	rd->free_rid(grid_texture); \
+	rd->free_rid(seams_buffer); \
 	rd->free_rid(probe_positions_buffer);
 
 	const uint32_t cluster_size = 16;
@@ -1535,9 +1537,9 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 	}
 #endif
 
-#define FREE_RASTER_RESOURCES       \
+#define FREE_RASTER_RESOURCES \
 	rd->free_rid(rasterize_shader); \
-	rd->free_rid(sampler);          \
+	rd->free_rid(sampler); \
 	rd->free_rid(raster_depth_buffer);
 
 	/* Plot direct light */
@@ -1596,9 +1598,9 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 	RID compute_base_uniform_set = rd->uniform_set_create(base_uniforms, compute_shader_primary, 0);
 
-#define FREE_COMPUTE_RESOURCES              \
+#define FREE_COMPUTE_RESOURCES \
 	rd->free_rid(compute_shader_unocclude); \
-	rd->free_rid(compute_shader_primary);   \
+	rd->free_rid(compute_shader_primary); \
 	rd->free_rid(compute_shader_secondary); \
 	rd->free_rid(compute_shader_light_probes);
 
@@ -2065,6 +2067,14 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 	/* DENOISE */
 
+	if (p_bake_sh) {
+		SWAP(light_accum_tex, light_accum_tex2);
+		BakeError error = _pack_l1(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices);
+		if (unlikely(error != BAKE_OK)) {
+			return error;
+		}
+	}
+
 	if (p_use_denoiser) {
 		if (p_step_function) {
 			if (p_step_function(0.8, RTR("Denoising"), p_bake_userdata, true)) {
@@ -2169,7 +2179,7 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 
 	ERR_FAIL_COND_V(blendseams_triangle_raster_shader.is_null(), BAKE_ERROR_LIGHTMAP_CANT_PRE_BAKE_MESHES);
 
-#define FREE_BLENDSEAMS_RESOURCES                \
+#define FREE_BLENDSEAMS_RESOURCES \
 	rd->free_rid(blendseams_line_raster_shader); \
 	rd->free_rid(blendseams_triangle_raster_shader);
 
@@ -2287,14 +2297,6 @@ LightmapperRD::BakeError LightmapperRD::bake(BakeQuality p_quality, bool p_use_d
 			}
 			seam_offset += slice_seam_count[i];
 			triangle_offset += slice_triangle_count[i];
-		}
-	}
-
-	if (p_bake_sh) {
-		SWAP(light_accum_tex, light_accum_tex2);
-		BakeError error = _pack_l1(rd, compute_shader, compute_base_uniform_set, push_constant, light_accum_tex2, light_accum_tex, atlas_size, atlas_slices);
-		if (unlikely(error != BAKE_OK)) {
-			return error;
 		}
 	}
 

@@ -29,6 +29,7 @@ def get_opts():
 
     return [
         ("osxcross_sdk", "OSXCross SDK version", "darwin16"),
+        ("SWIFT_FRONTEND", "Path to the swift-frontend binary", ""),
         ("MACOS_SDK_PATH", "Path to the macOS SDK", ""),
         ("vulkan_sdk_path", "Path to the Vulkan SDK", ""),
         EnumVariable("macports_clang", "Build using Clang from MacPorts", "no", ["no", "5.0", "devel"], ignorecase=2),
@@ -89,7 +90,7 @@ def configure(env: "SConsEnvironment"):
         env.Append(LINKFLAGS=["-arch", "x86_64", "-mmacosx-version-min=10.13"])
 
     env.Append(CCFLAGS=["-ffp-contract=off"])
-    env.Append(CCFLAGS=["-fobjc-arc"])
+    env.Append(CCFLAGS=["-fobjc-arc", "-fvisibility=hidden"])
 
     cc_version = get_compiler_version(env)
     cc_version_major = cc_version["apple_major"]

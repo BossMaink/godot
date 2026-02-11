@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "core/object/gdvirtual.gen.inc"
+#include "core/object/gdvirtual.gen.h"
 #include "core/object/object.h"
 
 class MainLoop : public Object {
@@ -66,6 +66,5 @@ public:
 	virtual bool process(double p_time);
 	virtual void finalize();
 
-	MainLoop() {}
 	virtual ~MainLoop() {}
 };

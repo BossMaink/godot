@@ -31,7 +31,6 @@
 #pragma once
 
 #include "core/io/image.h"
-#include "core/math/geometry_3d.h"
 #include "core/math/transform_2d.h"
 #include "core/templates/rid.h"
 #include "core/variant/typed_array.h"
@@ -39,16 +38,20 @@
 #include "servers/display/display_server.h"
 #include "servers/rendering/rendering_device.h"
 
+namespace Geometry3D {
+struct MeshData;
+}
+
 // Helper macros for code outside of the rendering server, but that is
 // called by the rendering server.
 #ifdef DEBUG_ENABLED
-#define ERR_NOT_ON_RENDER_THREAD                                          \
+#define ERR_NOT_ON_RENDER_THREAD \
 	RenderingServer *rendering_server = RenderingServer::get_singleton(); \
-	ERR_FAIL_NULL(rendering_server);                                      \
+	ERR_FAIL_NULL(rendering_server); \
 	ERR_FAIL_COND(!rendering_server->is_on_render_thread());
-#define ERR_NOT_ON_RENDER_THREAD_V(m_ret)                                 \
+#define ERR_NOT_ON_RENDER_THREAD_V(m_ret) \
 	RenderingServer *rendering_server = RenderingServer::get_singleton(); \
-	ERR_FAIL_NULL_V(rendering_server, m_ret);                             \
+	ERR_FAIL_NULL_V(rendering_server, m_ret); \
 	ERR_FAIL_COND_V(!rendering_server->is_on_render_thread(), m_ret);
 #else
 #define ERR_NOT_ON_RENDER_THREAD
@@ -133,11 +136,19 @@ public:
 		CUBEMAP_LAYER_BACK
 	};
 
+	enum TextureDrawableFormat {
+		TEXTURE_DRAWABLE_FORMAT_RGBA8,
+		TEXTURE_DRAWABLE_FORMAT_RGBA8_SRGB, // Use this if you want to read the result from both 2D (non-hdr) and 3D.
+		TEXTURE_DRAWABLE_FORMAT_RGBAH,
+		TEXTURE_DRAWABLE_FORMAT_RGBAF,
+	};
+
 	virtual RID texture_2d_create(const Ref<Image> &p_image) = 0;
 	virtual RID texture_2d_layered_create(const Vector<Ref<Image>> &p_layers, TextureLayeredType p_layered_type) = 0;
 	virtual RID texture_3d_create(Image::Format, int p_width, int p_height, int p_depth, bool p_mipmaps, const Vector<Ref<Image>> &p_data) = 0; //all slices, then all the mipmaps, must be coherent
 	virtual RID texture_external_create(int p_width, int p_height, uint64_t p_external_buffer = 0) = 0;
 	virtual RID texture_proxy_create(RID p_base) = 0;
+	virtual RID texture_drawable_create(int p_width, int p_height, TextureDrawableFormat p_format, const Color &p_color = Color(1, 1, 1, 1), bool p_with_mipmaps = false) = 0;
 
 	virtual RID texture_create_from_native_handle(TextureType p_type, Image::Format p_format, uint64_t p_native_handle, int p_width, int p_height, int p_depth, int p_layers = 1, TextureLayeredType p_layered_type = TEXTURE_LAYERED_2D_ARRAY) = 0;
 
@@ -145,6 +156,8 @@ public:
 	virtual void texture_3d_update(RID p_texture, const Vector<Ref<Image>> &p_data) = 0;
 	virtual void texture_external_update(RID p_texture, int p_width, int p_height, uint64_t p_external_buffer = 0) = 0;
 	virtual void texture_proxy_update(RID p_texture, RID p_proxy_to) = 0;
+
+	virtual void texture_drawable_blit_rect(const TypedArray<RID> &p_textures, const Rect2i &p_rect, RID p_material, const Color &p_modulate, const TypedArray<RID> &p_source_textures, int p_to_mipmap = 0) = 0;
 
 	// These two APIs can be used together or in combination with the others.
 	virtual RID texture_2d_placeholder_create() = 0;
@@ -160,6 +173,9 @@ public:
 
 	virtual void texture_set_path(RID p_texture, const String &p_path) = 0;
 	virtual String texture_get_path(RID p_texture) const = 0;
+
+	virtual void texture_drawable_generate_mipmaps(RID p_texture) = 0; // Update mipmaps if modified
+	virtual RID texture_drawable_get_default_material() const = 0; // To use with simplified functions in DrawableTexture2D
 
 	virtual Image::Format texture_get_format(RID p_texture) const = 0;
 
@@ -218,6 +234,7 @@ public:
 		SHADER_PARTICLES,
 		SHADER_SKY,
 		SHADER_FOG,
+		SHADER_TEXTURE_BLIT,
 		SHADER_MAX
 	};
 
@@ -514,6 +531,7 @@ public:
 	virtual void multimesh_set_physics_interpolated(RID p_multimesh, bool p_interpolated) = 0;
 	virtual void multimesh_set_physics_interpolation_quality(RID p_multimesh, MultimeshPhysicsInterpolationQuality p_quality) = 0;
 	virtual void multimesh_instance_reset_physics_interpolation(RID p_multimesh, int p_index) = 0;
+	virtual void multimesh_instances_reset_physics_interpolation(RID p_multimesh) = 0;
 
 	virtual void multimesh_set_visible_instances(RID p_multimesh, int p_visible) = 0;
 	virtual int multimesh_get_visible_instances(RID p_multimesh) const = 0;
@@ -980,7 +998,10 @@ public:
 		return VIEWPORT_SCALING_3D_TYPE_NONE;
 	}
 
+#ifndef XR_DISABLED
 	virtual void viewport_set_use_xr(RID p_viewport, bool p_use_xr) = 0;
+#endif // !XR_DISABLED
+
 	virtual void viewport_set_size(RID p_viewport, int p_width, int p_height) = 0;
 	virtual void viewport_set_active(RID p_viewport, bool p_active) = 0;
 	virtual void viewport_set_parent_viewport(RID p_viewport, RID p_parent_viewport) = 0;
@@ -1280,9 +1301,12 @@ public:
 	};
 
 	virtual void environment_set_tonemap(RID p_env, EnvironmentToneMapper p_tone_mapper, float p_exposure, float p_white) = 0;
+	virtual void environment_set_tonemap_agx_contrast(RID p_env, float p_agx_contrast) = 0;
 	virtual void environment_set_adjustment(RID p_env, bool p_enable, float p_brightness, float p_contrast, float p_saturation, bool p_use_1d_color_correction, RID p_color_correction) = 0;
 
 	virtual void environment_set_ssr(RID p_env, bool p_enable, int p_max_steps, float p_fade_in, float p_fade_out, float p_depth_tolerance) = 0;
+
+	virtual void environment_set_ssr_half_size(bool p_half_size) = 0;
 
 	enum EnvironmentSSRRoughnessQuality {
 		ENV_SSR_ROUGHNESS_QUALITY_DISABLED,
@@ -1844,7 +1868,23 @@ public:
 	virtual void mesh_add_surface_from_mesh_data(RID p_mesh, const Geometry3D::MeshData &p_mesh_data);
 	virtual void mesh_add_surface_from_planes(RID p_mesh, const Vector<Plane> &p_planes);
 
-	virtual void set_boot_image(const Ref<Image> &p_image, const Color &p_color, bool p_scale, bool p_use_filter = true) = 0;
+	enum SplashStretchMode {
+		SPLASH_STRETCH_MODE_DISABLED,
+		SPLASH_STRETCH_MODE_KEEP,
+		SPLASH_STRETCH_MODE_KEEP_WIDTH,
+		SPLASH_STRETCH_MODE_KEEP_HEIGHT,
+		SPLASH_STRETCH_MODE_COVER,
+		SPLASH_STRETCH_MODE_IGNORE,
+	};
+
+	virtual void set_boot_image_with_stretch(const Ref<Image> &p_image, const Color &p_color, SplashStretchMode p_stretch_mode, bool p_use_filter = true) = 0;
+	static Rect2 get_splash_stretched_screen_rect(const Size2 &p_image_size, const Size2 &p_window_size, SplashStretchMode p_stretch_mode); // Helper for splash screen
+#ifndef DISABLE_DEPRECATED
+	void set_boot_image(const Ref<Image> &p_image, const Color &p_color, bool p_scale, bool p_use_filter = true); // Superseded, but left to preserve compat.
+#endif
+	_ALWAYS_INLINE_ static SplashStretchMode map_scaling_option_to_stretch_mode(bool p_scale) {
+		return p_scale ? SplashStretchMode::SPLASH_STRETCH_MODE_KEEP : SplashStretchMode::SPLASH_STRETCH_MODE_DISABLED;
+	}
 	virtual Color get_default_clear_color() = 0;
 	virtual void set_default_clear_color(const Color &p_color) = 0;
 
@@ -1921,6 +1961,7 @@ private:
 VARIANT_ENUM_CAST(RenderingServer::TextureType);
 VARIANT_ENUM_CAST(RenderingServer::TextureLayeredType);
 VARIANT_ENUM_CAST(RenderingServer::CubeMapLayer);
+VARIANT_ENUM_CAST(RenderingServer::TextureDrawableFormat);
 VARIANT_ENUM_CAST(RenderingServer::PipelineSource);
 VARIANT_ENUM_CAST(RenderingServer::ShaderMode);
 VARIANT_ENUM_CAST(RenderingServer::ArrayType);
@@ -1998,6 +2039,7 @@ VARIANT_ENUM_CAST(RenderingServer::CanvasLightShadowFilter);
 VARIANT_ENUM_CAST(RenderingServer::CanvasOccluderPolygonCullMode);
 VARIANT_ENUM_CAST(RenderingServer::GlobalShaderParameterType);
 VARIANT_ENUM_CAST(RenderingServer::RenderingInfo);
+VARIANT_ENUM_CAST(RenderingServer::SplashStretchMode);
 VARIANT_ENUM_CAST(RenderingServer::CanvasTextureChannel);
 VARIANT_ENUM_CAST(RenderingServer::BakeChannels);
 

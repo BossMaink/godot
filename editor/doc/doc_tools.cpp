@@ -71,7 +71,7 @@ static String _get_indent(const String &p_text) {
 static String _translate_doc_string(const String &p_text) {
 	const String indent = _get_indent(p_text);
 	const String message = p_text.dedent().strip_edges();
-	const String translated = TranslationServer::get_singleton()->doc_translate(message, "");
+	const String translated = TranslationServer::get_singleton()->get_doc_domain()->translate(message, StringName());
 	// No need to restore stripped edges because they'll be stripped again later.
 	return translated.indent(indent);
 }
@@ -508,7 +508,7 @@ void DocTools::generate(BitField<GenerateFlags> p_flags) {
 				}
 
 				if (properties_from_instance) {
-					if (E.name == "resource_local_to_scene" || E.name == "resource_name" || E.name == "resource_path" || E.name == "script" || E.name == "resource_scene_unique_id") {
+					if (E.name == "resource_local_to_scene" || E.name == "resource_name" || E.name == "resource_path" || E.name == "resource_scene_unique_id") {
 						// Don't include spurious properties from Object property list.
 						continue;
 					}
@@ -660,6 +660,10 @@ void DocTools::generate(BitField<GenerateFlags> p_flags) {
 
 			if (signal_list.size()) {
 				for (const MethodInfo &mi : signal_list) {
+					if (mi.name.is_empty() || mi.name[0] == '_') {
+						continue; // Hidden, don't count.
+					}
+
 					DocData::MethodDoc signal;
 					signal.name = mi.name;
 					for (const PropertyInfo &arginfo : mi.arguments) {

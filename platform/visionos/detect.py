@@ -24,6 +24,7 @@ def get_opts():
     from SCons.Variables import BoolVariable
 
     return [
+        ("SWIFT_FRONTEND", "Path to the swift-frontend binary", ""),
         # APPLE_TOOLCHAIN_PATH Example: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain
         ("APPLE_TOOLCHAIN_PATH", "Path to the Apple toolchain", ""),
         (("APPLE_SDK_PATH", "VISIONOS_SDK_PATH"), "Path to the visionOS SDK", ""),
@@ -112,6 +113,8 @@ def configure(env: "SConsEnvironment"):
         env.Append(ASFLAGS=["-mtargetos=xros26.0"])
         env.Append(CCFLAGS=["-mtargetos=xros26.0"])
     detect_darwin_sdk_path(env["APPLE_PLATFORM"], env)
+
+    env.Append(CCFLAGS=["-ffp-contract=off"])
 
     if env["arch"] == "arm64":
         env.Append(

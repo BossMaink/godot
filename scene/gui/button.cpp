@@ -566,7 +566,8 @@ void Button::_shape(Ref<TextParagraph> p_paragraph, String p_text) const {
 	} else {
 		p_paragraph->set_direction((TextServer::Direction)text_direction);
 	}
-	p_paragraph->add_string(p_text, font, font_size, language);
+	const String &lang = language.is_empty() ? _get_locale() : language;
+	p_paragraph->add_string(p_text, font, font_size, lang);
 	p_paragraph->set_text_overrun_behavior(overrun_behavior);
 }
 
@@ -806,7 +807,7 @@ void Button::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_expand_icon"), &Button::is_expand_icon);
 
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "text", PROPERTY_HINT_MULTILINE_TEXT), "set_text", "get_text");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "icon", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"), "set_button_icon", "get_button_icon");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "icon", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_button_icon", "get_button_icon");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "flat"), "set_flat", "is_flat");
 
 	ADD_GROUP("Text Behavior", "");

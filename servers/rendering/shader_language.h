@@ -185,6 +185,10 @@ public:
 		TK_HINT_SCREEN_TEXTURE,
 		TK_HINT_NORMAL_ROUGHNESS_TEXTURE,
 		TK_HINT_DEPTH_TEXTURE,
+		TK_HINT_BLIT_SOURCE0,
+		TK_HINT_BLIT_SOURCE1,
+		TK_HINT_BLIT_SOURCE2,
+		TK_HINT_BLIT_SOURCE3,
 		TK_FILTER_NEAREST,
 		TK_FILTER_LINEAR,
 		TK_FILTER_NEAREST_MIPMAP,
@@ -677,6 +681,10 @@ public:
 				HINT_DEFAULT_TRANSPARENT,
 				HINT_ANISOTROPY,
 				HINT_SCREEN_TEXTURE,
+				HINT_BLIT_SOURCE0,
+				HINT_BLIT_SOURCE1,
+				HINT_BLIT_SOURCE2,
+				HINT_BLIT_SOURCE3,
 				HINT_NORMAL_ROUGHNESS_TEXTURE,
 				HINT_DEPTH_TEXTURE,
 				HINT_MAX
@@ -1135,7 +1143,7 @@ private:
 #endif // DEBUG_ENABLED
 	bool _is_operator_assign(Operator p_op) const;
 	bool _validate_assign(Node *p_node, const FunctionInfo &p_function_info, String *r_message = nullptr);
-	bool _validate_operator(const BlockNode *p_block, const FunctionInfo &p_function_info, OperatorNode *p_op, DataType *r_ret_type = nullptr, int *r_ret_size = nullptr);
+	bool _validate_operator(const BlockNode *p_block, const FunctionInfo &p_function_info, OperatorNode *p_op, DataType *r_ret_type = nullptr, int *r_ret_size = nullptr, StringName *r_ret_struct_name = nullptr);
 
 	Vector<Scalar> _get_node_values(const BlockNode *p_block, const FunctionInfo &p_function_info, Node *p_node);
 	bool _eval_operator(const BlockNode *p_block, const FunctionInfo &p_function_info, OperatorNode *p_op);

@@ -106,8 +106,10 @@
 #include "editor/scene/gradient_editor_plugin.h"
 #include "editor/scene/gui/control_editor_plugin.h"
 #include "editor/scene/gui/font_config_plugin.h"
+#include "editor/scene/gui/margin_container_editor_plugin.h"
 #include "editor/scene/gui/style_box_editor_plugin.h"
 #include "editor/scene/gui/theme_editor_plugin.h"
+#include "editor/scene/gui/virtual_joystick_editor_plugin.h"
 #include "editor/scene/material_editor_plugin.h"
 #include "editor/scene/packed_scene_editor_plugin.h"
 #include "editor/scene/resource_preloader_editor_plugin.h"
@@ -121,6 +123,7 @@
 #include "editor/script/editor_script.h"
 #include "editor/script/editor_script_plugin.h"
 #include "editor/script/script_editor_plugin.h"
+#include "editor/script/syntax_highlighters.h"
 #include "editor/settings/editor_command_palette.h"
 #include "editor/settings/editor_feature_profile.h"
 #include "editor/settings/editor_settings.h"
@@ -231,6 +234,7 @@ void register_editor_types() {
 	EditorPlugins::add_by_type<GradientTexture2DEditorPlugin>();
 	EditorPlugins::add_by_type<InputEventEditorPlugin>();
 	EditorPlugins::add_by_type<LightmapGIEditorPlugin>();
+	EditorPlugins::add_by_type<MarginContainerEditorPlugin>();
 	EditorPlugins::add_by_type<MaterialEditorPlugin>();
 	EditorPlugins::add_by_type<MeshEditorPlugin>();
 	EditorPlugins::add_by_type<MeshInstance3DEditorPlugin>();
@@ -254,6 +258,7 @@ void register_editor_types() {
 	EditorPlugins::add_by_type<TextureRegionEditorPlugin>();
 	EditorPlugins::add_by_type<ThemeEditorPlugin>();
 	EditorPlugins::add_by_type<ToolButtonEditorPlugin>();
+	EditorPlugins::add_by_type<VirtualJoystickEditorPlugin>();
 	EditorPlugins::add_by_type<VoxelGIEditorPlugin>();
 #ifndef DISABLE_DEPRECATED
 	EditorPlugins::add_by_type<SkeletonIK3DEditorPlugin>();
@@ -279,7 +284,7 @@ void register_editor_types() {
 #endif
 
 	// For correct doc generation.
-	GLOBAL_DEF("editor/run/main_run_args", "");
+	GLOBAL_DEF(PropertyInfo(Variant::STRING, "editor/run/main_run_args", PROPERTY_HINT_NONE, "monospace"), "");
 
 	GLOBAL_DEF(PropertyInfo(Variant::STRING, "editor/script/templates_search_path", PROPERTY_HINT_DIR), "res://script_templates");
 
