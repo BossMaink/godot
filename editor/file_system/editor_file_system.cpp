@@ -338,15 +338,14 @@ void EditorFileSystem::_first_scan_filesystem() {
 	ep.step(TTR("Verifying GDExtensions..."), 2, true);
 	GDExtensionManager::get_singleton()->ensure_extensions_loaded(extensions);
 
-	// Now that all the global class names should be loaded, create plugins.
-	// This is done after loading the global class names because plugins can use global class names.
-	ep.step(TTR("Initializing plugins..."), 3, true);
-	EditorNode::get_singleton()->init_plugins();
-
-	// Now that plugins and global class names should be loaded, create autoloads.
-	// This is done last because autoloads can use global class names and plugins.
-	ep.step(TTR("Creating autoload scripts..."), 4, true);
+	// Now that all the global class names should be loaded, create autoloads and plugins.
+	// This is done after loading the global class names because autoloads and plugins can use
+	// global class names.
+	ep.step(TTR("Creating autoload scripts..."), 3, true);
 	ProjectSettingsEditor::get_singleton()->init_autoloads();
+
+	ep.step(TTR("Initializing plugins..."), 4, true);
+	EditorNode::get_singleton()->init_plugins();
 
 	ep.step(TTR("Starting file scan..."), 5, true);
 }
@@ -2545,7 +2544,7 @@ void EditorFileSystem::_notify_filesystem_changed() {
 }
 
 HashSet<String> EditorFileSystem::get_valid_extensions() const {
-	return valid_extensions;
+	return HashSet<String>(valid_extensions);
 }
 
 void EditorFileSystem::_register_global_class_script(const String &p_search_path, const String &p_target_path, const ScriptClassInfoUpdate &p_script_update) {

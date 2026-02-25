@@ -1478,6 +1478,7 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 				_compute_edit(p_screenpos);
 				_edit.plane = TRANSFORM_VIEW;
 				_edit.accumulated_rotation_angle = 0.0;
+				_edit.rotation_angle = 0.0;
 				_edit.rotation_axis = _get_camera_normal();
 				_edit.view_axis_local = spatial_editor->get_gizmo_transform().basis.xform_inv(_get_camera_normal()).normalized();
 				_edit.gizmo_initiated = true;
@@ -1493,6 +1494,7 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 				_edit.is_trackball = true;
 				_edit.show_rotation_line = false;
 				_edit.accumulated_rotation_angle = 0.0;
+				_edit.rotation_angle = 0.0;
 				_edit.rotation_axis = _get_camera_normal();
 				_edit.gizmo_initiated = true;
 				spatial_editor->select_gizmo_highlight_axis(-1);
@@ -1507,6 +1509,7 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 				_compute_edit(p_screenpos);
 				_edit.plane = TransformPlane(TRANSFORM_X_AXIS + col_axis);
 				_edit.accumulated_rotation_angle = 0.0;
+				_edit.rotation_angle = 0.0;
 				_edit.rotation_axis = gt.basis.get_column(col_axis).normalized();
 				_edit.gizmo_initiated = true;
 			}
@@ -2752,7 +2755,7 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 						_edit.initial_click_vector = Vector3();
 						_edit.previous_rotation_vector = Vector3();
 						_edit.accumulated_rotation_angle = 0.0;
-						_edit.display_rotation_angle = 0.0;
+						_edit.rotation_angle = 0.0;
 						set_message(vformat(TTR("Rotating %s degrees."), String::num(0, 0)));
 					}
 					surface->queue_redraw();
@@ -3222,8 +3225,9 @@ void Node3DEditorViewport::_project_settings_changed() {
 	const bool transparent_background = GLOBAL_GET("rendering/viewport/transparent_background");
 	viewport->set_transparent_background(transparent_background);
 
+	const bool hdr_requested = GLOBAL_GET("display/window/hdr/request_hdr_output");
 	const bool use_hdr_2d = GLOBAL_GET("rendering/viewport/hdr_2d");
-	viewport->set_use_hdr_2d(use_hdr_2d);
+	viewport->set_use_hdr_2d(use_hdr_2d || hdr_requested);
 
 	const bool use_debanding = GLOBAL_GET("rendering/anti_aliasing/quality/use_debanding");
 	viewport->set_use_debanding(use_debanding);
@@ -3833,7 +3837,7 @@ void Node3DEditorViewport::_draw() {
 			}
 
 			const int segments = 64;
-			float display_angle = _edit.display_rotation_angle;
+			float display_angle = _edit.rotation_angle;
 
 			float abs_angle = Math::abs(display_angle);
 			if (abs_angle > Math::TAU) {
@@ -3861,12 +3865,11 @@ void Node3DEditorViewport::_draw() {
 				Vector3 point1_3d = _edit.center + gizmo_scale * rotation_radius * (right * Math::cos(angle1) + forward * Math::sin(angle1));
 				Vector3 point2_3d = _edit.center + gizmo_scale * rotation_radius * (right * Math::cos(angle2) + forward * Math::sin(angle2));
 
-				Point2 center_2d = center;
 				Point2 point1_2d = point_to_screen(point1_3d);
 				Point2 point2_2d = point_to_screen(point2_3d);
 
 				Vector<Point2> triangle_points;
-				triangle_points.push_back(center_2d);
+				triangle_points.push_back(center);
 				triangle_points.push_back(point1_2d);
 				triangle_points.push_back(point2_2d);
 
@@ -3890,7 +3893,7 @@ void Node3DEditorViewport::_draw() {
 					Math::round(2 * EDSCALE),
 					true);
 
-			Vector3 end_point_3d = _edit.center + gizmo_scale * rotation_radius * (right * Math::cos(_edit.accumulated_rotation_angle) + forward * Math::sin(_edit.accumulated_rotation_angle));
+			Vector3 end_point_3d = _edit.center + gizmo_scale * rotation_radius * (right * Math::cos(display_angle) + forward * Math::sin(display_angle));
 			Point2 end_point_2d = point_to_screen(end_point_3d);
 			RenderingServer::get_singleton()->canvas_item_add_line(
 					ci,
@@ -4739,6 +4742,13 @@ void Node3DEditorViewport::update_transform_gizmo_view() {
 	rs->instance_set_visible(axis_gizmo_instance[0], show_axes && (_edit.plane == TRANSFORM_X_AXIS || _edit.plane == TRANSFORM_XY || _edit.plane == TRANSFORM_XZ));
 	rs->instance_set_visible(axis_gizmo_instance[1], show_axes && (_edit.plane == TRANSFORM_Y_AXIS || _edit.plane == TRANSFORM_XY || _edit.plane == TRANSFORM_YZ));
 	rs->instance_set_visible(axis_gizmo_instance[2], show_axes && (_edit.plane == TRANSFORM_Z_AXIS || _edit.plane == TRANSFORM_XZ || _edit.plane == TRANSFORM_YZ));
+}
+
+void Node3DEditorViewport::update_transform_gizmo_highlight() {
+	if (!is_visible_in_tree() || !Rect2(Vector2(), surface->get_size()).has_point(surface->get_local_mouse_position())) {
+		return;
+	}
+	_transform_gizmo_select(surface->get_local_mouse_position(), true);
 }
 
 void Node3DEditorViewport::set_state(const Dictionary &p_state) {
@@ -5672,7 +5682,7 @@ void Node3DEditorViewport::begin_transform(TransformMode p_mode, bool instant) {
 		_edit.initial_click_vector = Vector3();
 		_edit.previous_rotation_vector = Vector3();
 		_edit.accumulated_rotation_angle = 0.0;
-		_edit.display_rotation_angle = 0.0;
+		_edit.rotation_angle = 0.0;
 		_edit.gizmo_initiated = false;
 		switch (p_mode) {
 			case TRANSFORM_ROTATE:
@@ -6032,24 +6042,11 @@ void Node3DEditorViewport::update_transform(bool p_shift) {
 				}
 				_edit.previous_rotation_vector = current_rotation_vector;
 				_edit.accumulated_rotation_angle = 0.0;
-				_edit.display_rotation_angle = 0.0;
+				_edit.rotation_angle = 0.0;
 			}
 
 			static const float orthogonal_threshold = Math::cos(Math::deg_to_rad(85.0f));
 			bool axis_is_orthogonal = Math::abs(plane.normal.dot(global_axis)) < orthogonal_threshold;
-
-			double angle = 0.0f;
-			if (axis_is_orthogonal) {
-				_edit.show_rotation_line = false;
-				Vector3 projection_axis = plane.normal.cross(global_axis);
-				Vector3 delta = intersection - click;
-				float projection = delta.dot(projection_axis);
-				angle = (projection * (Math::PI / 2.0f)) / (gizmo_scale * GIZMO_CIRCLE_SIZE);
-			} else {
-				_edit.show_rotation_line = true;
-				Vector3 click_axis = (click - _edit.center).normalized();
-				angle = click_axis.signed_angle_to(current_rotation_vector, global_axis);
-			}
 
 			if (_edit.previous_rotation_vector != Vector3()) {
 				double delta_angle = _edit.previous_rotation_vector.signed_angle_to(current_rotation_vector, global_axis);
@@ -6060,16 +6057,28 @@ void Node3DEditorViewport::update_transform(bool p_shift) {
 			bool snapping = _edit.snap || spatial_editor->is_snap_enabled();
 			if (snapping) {
 				snap = spatial_editor->get_rotate_snap();
-				_edit.display_rotation_angle = Math::deg_to_rad(Math::snapped(Math::rad_to_deg(_edit.accumulated_rotation_angle), snap));
-			} else {
-				_edit.display_rotation_angle = _edit.accumulated_rotation_angle;
+				snap_step_decimals = Math::range_step_decimals(snap);
 			}
-			angle = Math::snapped(Math::rad_to_deg(angle), snap);
-			set_message(vformat(TTR("Rotating %s degrees."), String::num(angle, snap_step_decimals)));
-			angle = Math::deg_to_rad(angle);
+
+			if (axis_is_orthogonal) {
+				_edit.show_rotation_line = false;
+				Vector3 projection_axis = plane.normal.cross(global_axis);
+				Vector3 delta = intersection - click;
+				float projection = delta.dot(projection_axis);
+				double orth_angle = (projection * (Math::PI / 2.0f)) / (gizmo_scale * GIZMO_CIRCLE_SIZE);
+				_edit.rotation_angle = snapping
+						? Math::deg_to_rad(Math::snapped(Math::rad_to_deg(orth_angle), snap))
+						: orth_angle;
+			} else {
+				_edit.show_rotation_line = true;
+				_edit.rotation_angle = snapping
+						? Math::deg_to_rad(Math::snapped(Math::rad_to_deg(_edit.accumulated_rotation_angle), snap))
+						: _edit.accumulated_rotation_angle;
+			}
+			set_message(vformat(TTR("Rotating %s degrees."), String::num(Math::rad_to_deg(_edit.rotation_angle), snap_step_decimals)));
 
 			Vector3 compute_axis = local_coords ? local_axis : global_axis;
-			apply_transform(compute_axis, angle);
+			apply_transform(compute_axis, _edit.rotation_angle);
 		} break;
 		default: {
 		}
@@ -6150,7 +6159,7 @@ void Node3DEditorViewport::finish_transform() {
 	_edit.initial_click_vector = Vector3();
 	_edit.previous_rotation_vector = Vector3();
 	_edit.accumulated_rotation_angle = 0.0;
-	_edit.display_rotation_angle = 0.0;
+	_edit.rotation_angle = 0.0;
 	_edit.gizmo_initiated = false;
 	spatial_editor->set_local_coords_enabled(_edit.original_local);
 	spatial_editor->update_transform_gizmo();
@@ -6196,6 +6205,27 @@ void Node3DEditorViewport::_add_advanced_debug_draw_mode_item(PopupMenu *p_popup
 	display_submenu->add_radio_check_item(p_name, p_value);
 	Array item_data = { p_rendering_methods, p_tooltip };
 	display_submenu->set_item_metadata(-1, item_data); // Tooltip is assigned in NOTIFICATION_TRANSLATION_CHANGED.
+}
+
+void Node3DEditorViewport::_load_viewport_inputs() {
+	// Registering with Key::NONE intentionally creates an empty Array.
+	register_shortcut_action("spatial_editor/viewport_orbit_modifier_1", TTRC("Viewport Orbit Modifier 1"), Key::NONE);
+	register_shortcut_action("spatial_editor/viewport_orbit_modifier_2", TTRC("Viewport Orbit Modifier 2"), Key::NONE);
+	register_shortcut_action("spatial_editor/viewport_orbit_snap_modifier_1", TTRC("Viewport Orbit Snap Modifier 1"), Key::ALT);
+	register_shortcut_action("spatial_editor/viewport_orbit_snap_modifier_2", TTRC("Viewport Orbit Snap Modifier 2"), Key::NONE);
+	register_shortcut_action("spatial_editor/viewport_pan_modifier_1", TTRC("Viewport Pan Modifier 1"), Key::SHIFT);
+	register_shortcut_action("spatial_editor/viewport_pan_modifier_2", TTRC("Viewport Pan Modifier 2"), Key::NONE);
+	register_shortcut_action("spatial_editor/viewport_zoom_modifier_1", TTRC("Viewport Zoom Modifier 1"), Key::CTRL);
+	register_shortcut_action("spatial_editor/viewport_zoom_modifier_2", TTRC("Viewport Zoom Modifier 2"), Key::NONE);
+
+	register_shortcut_action("spatial_editor/freelook_left", TTRC("Freelook Left"), Key::A, true);
+	register_shortcut_action("spatial_editor/freelook_right", TTRC("Freelook Right"), Key::D, true);
+	register_shortcut_action("spatial_editor/freelook_forward", TTRC("Freelook Forward"), Key::W, true);
+	register_shortcut_action("spatial_editor/freelook_backwards", TTRC("Freelook Backwards"), Key::S, true);
+	register_shortcut_action("spatial_editor/freelook_up", TTRC("Freelook Up"), Key::E, true);
+	register_shortcut_action("spatial_editor/freelook_down", TTRC("Freelook Down"), Key::Q, true);
+	register_shortcut_action("spatial_editor/freelook_speed_modifier", TTRC("Freelook Speed Modifier"), Key::SHIFT);
+	register_shortcut_action("spatial_editor/freelook_slow_modifier", TTRC("Freelook Slow Modifier"), Key::ALT);
 }
 
 Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p_index) {
@@ -6370,24 +6400,8 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
 	display_submenu->connect(SceneStringName(id_pressed), callable_mp(this, &Node3DEditorViewport::_menu_option));
 	view_display_menu->set_disable_shortcuts(true);
 
-	// Registering with Key::NONE intentionally creates an empty Array.
-	register_shortcut_action("spatial_editor/viewport_orbit_modifier_1", TTRC("Viewport Orbit Modifier 1"), Key::NONE);
-	register_shortcut_action("spatial_editor/viewport_orbit_modifier_2", TTRC("Viewport Orbit Modifier 2"), Key::NONE);
-	register_shortcut_action("spatial_editor/viewport_orbit_snap_modifier_1", TTRC("Viewport Orbit Snap Modifier 1"), Key::ALT);
-	register_shortcut_action("spatial_editor/viewport_orbit_snap_modifier_2", TTRC("Viewport Orbit Snap Modifier 2"), Key::NONE);
-	register_shortcut_action("spatial_editor/viewport_pan_modifier_1", TTRC("Viewport Pan Modifier 1"), Key::SHIFT);
-	register_shortcut_action("spatial_editor/viewport_pan_modifier_2", TTRC("Viewport Pan Modifier 2"), Key::NONE);
-	register_shortcut_action("spatial_editor/viewport_zoom_modifier_1", TTRC("Viewport Zoom Modifier 1"), Key::CTRL);
-	register_shortcut_action("spatial_editor/viewport_zoom_modifier_2", TTRC("Viewport Zoom Modifier 2"), Key::NONE);
-
-	register_shortcut_action("spatial_editor/freelook_left", TTRC("Freelook Left"), Key::A, true);
-	register_shortcut_action("spatial_editor/freelook_right", TTRC("Freelook Right"), Key::D, true);
-	register_shortcut_action("spatial_editor/freelook_forward", TTRC("Freelook Forward"), Key::W, true);
-	register_shortcut_action("spatial_editor/freelook_backwards", TTRC("Freelook Backwards"), Key::S, true);
-	register_shortcut_action("spatial_editor/freelook_up", TTRC("Freelook Up"), Key::E, true);
-	register_shortcut_action("spatial_editor/freelook_down", TTRC("Freelook Down"), Key::Q, true);
-	register_shortcut_action("spatial_editor/freelook_speed_modifier", TTRC("Freelook Speed Modifier"), Key::SHIFT);
-	register_shortcut_action("spatial_editor/freelook_slow_modifier", TTRC("Freelook Slow Modifier"), Key::ALT);
+	_load_viewport_inputs();
+	InputMap::get_singleton()->connect("project_settings_loaded", callable_mp(this, &Node3DEditorViewport::_load_viewport_inputs));
 
 	ED_SHORTCUT("spatial_editor/lock_transform_x", TTRC("Lock Transformation to X axis"), Key::X);
 	ED_SHORTCUT("spatial_editor/lock_transform_y", TTRC("Lock Transformation to Y axis"), Key::Y);
@@ -6413,6 +6427,7 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
 	preview_camera->set_shortcut(ED_SHORTCUT("spatial_editor/toggle_camera_preview", TTRC("Toggle Camera Preview"), KeyModifierMask::CTRL | Key::P));
 	vbox->add_child(preview_camera);
 	preview_camera->set_h_size_flags(0);
+	preview_camera->set_theme_type_variation("CheckBoxNoIconTint");
 	preview_camera->hide();
 	preview_camera->connect(SceneStringName(toggled), callable_mp(this, &Node3DEditorViewport::_toggle_camera_preview));
 	previewing = nullptr;
@@ -6633,8 +6648,8 @@ void Node3DEditorViewportContainer::gui_input(const Ref<InputEvent> &p_event) {
 			int mid_w = size.width * ratio_h;
 			int mid_h = size.height * ratio_v;
 
-			dragging_h = mb->get_position().x > (mid_w - h_sep / 2) && mb->get_position().x < (mid_w + h_sep / 2);
-			dragging_v = mb->get_position().y > (mid_h - v_sep / 2) && mb->get_position().y < (mid_h + v_sep / 2);
+			dragging_h = mb->get_position().x >= (mid_w - h_sep / 2) && mb->get_position().x < (mid_w + h_sep / 2);
+			dragging_v = mb->get_position().y >= (mid_h - v_sep / 2) && mb->get_position().y < (mid_h + v_sep / 2);
 
 			drag_begin_pos = mb->get_position();
 			drag_begin_ratio.x = ratio_h;
@@ -6681,8 +6696,8 @@ void Node3DEditorViewportContainer::gui_input(const Ref<InputEvent> &p_event) {
 
 			bool was_hovering_h = hovering_h;
 			bool was_hovering_v = hovering_v;
-			hovering_h = mm->get_position().x > (mid_w - h_sep / 2) && mm->get_position().x < (mid_w + h_sep / 2);
-			hovering_v = mm->get_position().y > (mid_h - v_sep / 2) && mm->get_position().y < (mid_h + v_sep / 2);
+			hovering_h = mm->get_position().x >= (mid_w - h_sep / 2) && mm->get_position().x < (mid_w + h_sep / 2);
+			hovering_v = mm->get_position().y >= (mid_h - v_sep / 2) && mm->get_position().y < (mid_h + v_sep / 2);
 
 			if (was_hovering_h != hovering_h || was_hovering_v != hovering_v) {
 				queue_redraw();
@@ -7295,6 +7310,16 @@ void Node3DEditor::set_state(const Dictionary &p_state) {
 		}
 	}
 
+	if (d.has("zfar")) {
+		settings_zfar->set_value(double(d["zfar"]));
+	}
+	if (d.has("znear")) {
+		settings_znear->set_value(double(d["znear"]));
+	}
+	if (d.has("fov")) {
+		settings_fov->set_value(double(d["fov"]));
+	}
+
 	if (d.has("viewports")) {
 		Array vp = d["viewports"];
 		uint32_t vp_size = static_cast<uint32_t>(vp.size());
@@ -7308,15 +7333,6 @@ void Node3DEditor::set_state(const Dictionary &p_state) {
 		}
 	}
 
-	if (d.has("zfar")) {
-		settings_zfar->set_value(double(d["zfar"]));
-	}
-	if (d.has("znear")) {
-		settings_znear->set_value(double(d["znear"]));
-	}
-	if (d.has("fov")) {
-		settings_fov->set_value(double(d["fov"]));
-	}
 	if (d.has("show_grid")) {
 		bool use = d["show_grid"];
 
@@ -7509,6 +7525,9 @@ void Node3DEditor::_menu_item_toggled(bool pressed, int p_option) {
 		case MENU_TOOL_USE_TRACKBALL: {
 			tool_option_button[TOOL_OPT_USE_TRACKBALL]->set_pressed(pressed);
 			trackball_enabled = pressed;
+			for (uint32_t i = 0; i < VIEWPORTS_COUNT; i++) {
+				viewports[i]->update_transform_gizmo_highlight();
+			}
 		} break;
 	}
 }
@@ -9126,11 +9145,14 @@ void Node3DEditor::_update_theme() {
 void Node3DEditor::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_TRANSLATION_CHANGED: {
-			tool_button[TOOL_MODE_TRANSFORM]->set_tooltip_text(vformat(TTR("%s+Drag: Rotate selected node around pivot."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + TTR("Alt+RMB: Show list of all nodes at position clicked, including locked.") + "\n" + TTR("(Available in all modes.)"));
-			tool_button[TOOL_MODE_MOVE]->set_tooltip_text(vformat(TTR("%s+Drag: Use snap."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + TTR("Alt+RMB: Show list of all nodes at position clicked, including locked."));
-			tool_button[TOOL_MODE_ROTATE]->set_tooltip_text(vformat(TTR("%s+Drag: Use snap."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + TTR("Alt+RMB: Show list of all nodes at position clicked, including locked."));
-			tool_button[TOOL_MODE_SCALE]->set_tooltip_text(vformat(TTR("%s+Drag: Use snap."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + TTR("Alt+RMB: Show list of all nodes at position clicked, including locked."));
-			tool_button[TOOL_MODE_SELECT]->set_tooltip_text(TTR("Alt+RMB: Show list of all nodes at position clicked, including locked.") + "\n" + TTR("(Available in all modes.)"));
+			const String show_list_tooltip = TTR("Alt+RMB: Show list of all nodes at position clicked, including locked.");
+			tool_button[TOOL_MODE_TRANSFORM]->set_tooltip_text(vformat(TTR("%s+Drag: Rotate selected node around pivot."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + show_list_tooltip);
+			tool_button[TOOL_MODE_MOVE]->set_tooltip_text(vformat(TTR("%s+Drag: Use snap."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + show_list_tooltip);
+			tool_button[TOOL_MODE_ROTATE]->set_tooltip_text(vformat(TTR("%s+Drag: Use snap."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + show_list_tooltip);
+			tool_button[TOOL_MODE_SCALE]->set_tooltip_text(vformat(TTR("%s+Drag: Use snap."), keycode_get_string((Key)KeyModifierMask::CMD_OR_CTRL)) + "\n" + show_list_tooltip);
+			tool_button[TOOL_MODE_SELECT]->set_tooltip_text(show_list_tooltip);
+			tool_button[TOOL_MODE_LIST_SELECT]->set_tooltip_text(TTR("Show list of selectable nodes at position clicked.") + "\n" + show_list_tooltip);
+			tool_button[TOOL_RULER]->set_tooltip_text(TTR("LMB+Drag: Measure the distance between two points in 3D space.") + "\n" + show_list_tooltip);
 			_update_gizmos_menu();
 		} break;
 
@@ -9681,7 +9703,7 @@ void Node3DEditor::_load_default_preview_settings() {
 	if (OS::get_singleton()->get_current_rendering_method() != "gl_compatibility" && OS::get_singleton()->get_current_rendering_method() != "dummy") {
 		environ_glow_button->set_pressed_no_signal(true);
 	}
-	environ_tonemap_button->set_pressed_no_signal(true);
+	environ_tonemap_button->set_pressed_no_signal(false);
 	environ_ao_button->set_pressed_no_signal(false);
 	environ_gi_button->set_pressed_no_signal(false);
 	sun_shadow_max_distance->set_value_no_signal(100);
@@ -9997,7 +10019,8 @@ Node3DEditor::Node3DEditor() {
 	tool_button[TOOL_MODE_LIST_SELECT]->set_toggle_mode(true);
 	tool_button[TOOL_MODE_LIST_SELECT]->set_theme_type_variation(SceneStringName(FlatButton));
 	tool_button[TOOL_MODE_LIST_SELECT]->connect(SceneStringName(pressed), callable_mp(this, &Node3DEditor::_menu_item_pressed).bind(MENU_TOOL_LIST_SELECT));
-	tool_button[TOOL_MODE_LIST_SELECT]->set_tooltip_text(TTRC("Show list of selectable nodes at position clicked."));
+	tool_button[TOOL_MODE_LIST_SELECT]->set_tooltip_text(TTR("Show list of selectable nodes at position clicked.") + "\n" + TTR("Alt+RMB: Show list of all nodes at position clicked, including locked."));
+	tool_button[TOOL_MODE_LIST_SELECT]->set_accessibility_name(TTRC("Show List of Selectable Nodes"));
 
 	tool_button[TOOL_LOCK_SELECTED] = memnew(Button);
 	main_menu_hbox->add_child(tool_button[TOOL_LOCK_SELECTED]);

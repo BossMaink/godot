@@ -30,23 +30,25 @@
 
 #include "rasterizer_scene_gles3.h"
 
-#include "drivers/gles3/effects/copy_effects.h"
-#include "drivers/gles3/effects/feed_effects.h"
-#include "drivers/gles3/storage/material_storage.h"
-#include "rasterizer_gles3.h"
-#include "storage/config.h"
-#include "storage/mesh_storage.h"
-#include "storage/particles_storage.h"
-#include "storage/texture_storage.h"
+#ifdef GLES3_ENABLED
 
 #include "core/config/project_settings.h"
 #include "core/templates/sort_array.h"
+#include "drivers/gles3/effects/copy_effects.h"
+#include "drivers/gles3/effects/cubemap_filter.h"
+#include "drivers/gles3/effects/feed_effects.h"
+#include "drivers/gles3/effects/post_effects.h"
+#include "drivers/gles3/rasterizer_util_gles3.h"
+#include "drivers/gles3/storage/config.h"
+#include "drivers/gles3/storage/mesh_storage.h"
+#include "drivers/gles3/storage/particles_storage.h"
+#include "drivers/gles3/storage/render_scene_buffers_gles3.h"
+#include "drivers/gles3/storage/texture_storage.h"
+#include "drivers/gles3/storage/utilities.h"
 #include "servers/camera/camera_feed.h"
 #include "servers/camera/camera_server.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_server_globals.h"
-
-#ifdef GLES3_ENABLED
 
 RasterizerSceneGLES3 *RasterizerSceneGLES3::singleton = nullptr;
 
@@ -588,7 +590,7 @@ GLuint _init_radiance_texture(int p_size, int p_mipmaps, String p_name) {
 	glGenTextures(1, &radiance_id);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, radiance_id);
 #ifdef GL_API_ENABLED
-	if (RasterizerGLES3::is_gles_over_gl()) {
+	if (RasterizerUtilGLES3::is_gles_over_gl()) {
 		//TODO, on low-end compare this to allocating each face of each mip individually
 		// see: https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexStorage2D.xhtml
 		for (int i = 0; i < 6; i++) {
@@ -599,7 +601,7 @@ GLuint _init_radiance_texture(int p_size, int p_mipmaps, String p_name) {
 	}
 #endif // GL_API_ENABLED
 #ifdef GLES_API_ENABLED
-	if (!RasterizerGLES3::is_gles_over_gl()) {
+	if (!RasterizerUtilGLES3::is_gles_over_gl()) {
 		glTexStorage2D(GL_TEXTURE_CUBE_MAP, p_mipmaps, GL_RGB10_A2, p_size, p_size);
 	}
 #endif // GLES_API_ENABLED
@@ -2235,7 +2237,7 @@ void RasterizerSceneGLES3::_render_shadow_pass(RID p_light, RID p_shadow_atlas, 
 
 	glColorMask(0, 0, 0, 0);
 	glDrawBuffers(0, nullptr);
-	RasterizerGLES3::clear_depth(0.0);
+	RasterizerUtilGLES3::clear_depth(0.0);
 	if (needs_clear) {
 		glClear(GL_DEPTH_BUFFER_BIT);
 	}
@@ -2263,7 +2265,7 @@ void RasterizerSceneGLES3::_render_shadow_pass(RID p_light, RID p_shadow_atlas, 
 	glBindFramebuffer(GL_FRAMEBUFFER, GLES3::TextureStorage::system_fbo);
 }
 
-void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, float p_window_output_max_value, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
 	GLES3::TextureStorage *texture_storage = GLES3::TextureStorage::get_singleton();
 	GLES3::Config *config = GLES3::Config::get_singleton();
 	RENDER_TIMESTAMP("Setup 3D Scene");
@@ -2399,7 +2401,7 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 
 		tonemap_ubo.exposure = environment_get_exposure(render_data.environment);
 		tonemap_ubo.tonemapper = int32_t(environment_get_tone_mapper(render_data.environment));
-		RendererEnvironmentStorage::TonemapParameters params = environment_get_tonemap_parameters(render_data.environment, false);
+		RendererEnvironmentStorage::TonemapParameters params = environment_get_tonemap_parameters(render_data.environment, false, 1.0f);
 		tonemap_ubo.tonemapper_params[0] = params.tonemapper_params[0];
 		tonemap_ubo.tonemapper_params[1] = params.tonemapper_params[1];
 		tonemap_ubo.tonemapper_params[2] = params.tonemapper_params[2];
@@ -2560,7 +2562,7 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 		scene_state.enable_gl_scissor_test(false);
 
 		glColorMask(1, 1, 1, 1);
-		RasterizerGLES3::clear_depth(0.0);
+		RasterizerUtilGLES3::clear_depth(0.0);
 		glClearColor(0.0, 0.0, 0.0, 0.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		GLuint db = GL_COLOR_ATTACHMENT0;
@@ -2620,8 +2622,8 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 		scene_state.enable_gl_stencil_test(false);
 
 		glColorMask(0, 0, 0, 0);
-		RasterizerGLES3::clear_depth(0.0);
-		RasterizerGLES3::clear_stencil(0);
+		RasterizerUtilGLES3::clear_depth(0.0);
+		RasterizerUtilGLES3::clear_stencil(0);
 		glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		// Some desktop GL implementations fall apart when using Multiview with GL_NONE.
 		GLuint db = p_camera_data->view_count > 1 ? GL_COLOR_ATTACHMENT0 : GL_NONE;
@@ -2665,8 +2667,8 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 	scene_state.enable_gl_stencil_test(false);
 
 	if (!fb_cleared) {
-		RasterizerGLES3::clear_depth(0.0);
-		RasterizerGLES3::clear_stencil(0);
+		RasterizerUtilGLES3::clear_depth(0.0);
+		RasterizerUtilGLES3::clear_stencil(0);
 		glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	}
 
@@ -2868,7 +2870,7 @@ void RasterizerSceneGLES3::_render_post_processing(const RenderDataGLES3 *p_rend
 		glow_hdr_bleed_threshold = environment_get_glow_hdr_bleed_threshold(p_render_data->environment);
 		glow_hdr_bleed_scale = environment_get_glow_hdr_bleed_scale(p_render_data->environment);
 		glow_hdr_luminance_cap = environment_get_glow_hdr_luminance_cap(p_render_data->environment);
-		srgb_white = environment_get_white(p_render_data->environment, false);
+		srgb_white = environment_get_white(p_render_data->environment, false, 1.0f);
 	}
 
 	if (glow_enabled) {
@@ -2941,7 +2943,7 @@ void RasterizerSceneGLES3::_render_post_processing(const RenderDataGLES3 *p_rend
 			// We need to pass this in for SSAO.
 			GLuint depth_buffer = fbo_int != 0 ? rb->get_internal_depth() : texture_storage->render_target_get_depth(render_target);
 
-			const GLES3::Glow::GLOWLEVEL *glow_buffers = nullptr;
+			const GLES3::Glow::Level *glow_buffers = nullptr;
 			if (glow_enabled) {
 				glow_buffers = rb->get_glow_buffers();
 
@@ -3004,7 +3006,7 @@ void RasterizerSceneGLES3::_render_post_processing(const RenderDataGLES3 *p_rend
 		// Rendered to intermediate buffer, must copy to our render target
 		if (fbo_int != 0) {
 			// Apply glow/bloom if requested? then populate our glow buffers
-			const GLES3::Glow::GLOWLEVEL *glow_buffers = nullptr;
+			const GLES3::Glow::Level *glow_buffers = nullptr;
 			GLuint source_color = fbo_int != 0 ? rb->get_internal_color() : texture_storage->render_target_get_color(render_target);
 
 			// Moved this up so SSAO could use it too.
@@ -3974,7 +3976,7 @@ void RasterizerSceneGLES3::render_particle_collider_heightfield(RID p_collider, 
 	glDrawBuffers(0, nullptr);
 
 	glColorMask(0, 0, 0, 0);
-	RasterizerGLES3::clear_depth(0.0);
+	RasterizerUtilGLES3::clear_depth(0.0);
 
 	glClear(GL_DEPTH_BUFFER_BIT);
 
@@ -4026,7 +4028,7 @@ void RasterizerSceneGLES3::_render_uv2(const PagedArray<RenderGeometryInstance *
 		glDrawBuffers(std_size(draw_buffers), draw_buffers);
 
 		glClearColor(0.0, 0.0, 0.0, 0.0);
-		RasterizerGLES3::clear_depth(0.0);
+		RasterizerUtilGLES3::clear_depth(0.0);
 		glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
 		uint64_t base_spec_constant = 0;
@@ -4619,7 +4621,7 @@ void sky() {
 	}
 
 #ifdef GL_API_ENABLED
-	if (RasterizerGLES3::is_gles_over_gl()) {
+	if (RasterizerUtilGLES3::is_gles_over_gl()) {
 		glEnable(_EXT_TEXTURE_CUBE_MAP_SEAMLESS);
 	}
 #endif // GL_API_ENABLED

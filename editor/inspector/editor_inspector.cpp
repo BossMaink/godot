@@ -1251,6 +1251,7 @@ bool EditorProperty::is_cache_valid() const {
 	}
 	return true;
 }
+
 void EditorProperty::update_cache() {
 	cache.clear();
 	if (object && property != StringName()) {
@@ -1261,6 +1262,15 @@ void EditorProperty::update_cache() {
 		}
 	}
 }
+
+void EditorProperty::set_deferred_drag_mode_enabled(bool p_enabled) {
+	deferred_drag_mode = p_enabled;
+}
+
+bool EditorProperty::is_deferred_drag_mode_enabled() const {
+	return deferred_drag_mode;
+}
+
 Variant EditorProperty::get_drag_data(const Point2 &p_point) {
 	if (property == StringName()) {
 		return Variant();
@@ -3845,6 +3855,11 @@ void EditorInspector::update_tree() {
 		return;
 	}
 
+	if (!is_visible_in_tree()) {
+		update_tree_pending = true;
+		return;
+	}
+
 	bool root_inspector_was_following_focus = get_root_inspector()->is_following_focus();
 	if (root_inspector_was_following_focus) {
 		// Temporarily disable focus following on the root inspector to avoid jumping while the inspector is updating.
@@ -5809,7 +5824,7 @@ void EditorInspector::add_custom_property_description(const String &p_class, con
 String EditorInspector::get_custom_property_description(const String &p_property) const {
 	HashMap<String, String>::ConstIterator E = custom_property_descriptions.find(p_property);
 	if (E) {
-		return E->value;
+		return TTR(E->value);
 	}
 	return "";
 }
@@ -5911,8 +5926,6 @@ void EditorInspector::_bind_methods() {
 }
 
 EditorInspector::EditorInspector() {
-	object = nullptr;
-
 	base_vbox = memnew(VBoxContainer);
 	base_vbox->set_theme_type_variation(SNAME("EditorInspectorContainer"));
 	base_vbox->set_h_size_flags(SIZE_EXPAND_FILL);
