@@ -86,7 +86,7 @@ public:
 
 		virtual ~ShaderData() {}
 
-		static RD::PipelineColorBlendState::Attachment blend_mode_to_blend_attachment(BlendMode p_mode, const RD::BlendFactor *p_factors);
+		static RD::PipelineColorBlendState::Attachment blend_mode_to_blend_attachment(BlendMode p_mode);
 		static bool blend_mode_uses_blend_alpha(BlendMode p_mode);
 	};
 
