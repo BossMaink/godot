@@ -129,6 +129,11 @@ String EditorFileSystemDirectory::get_file_path(int p_idx) const {
 	return get_path().path_join(get_file(p_idx));
 }
 
+ResourceUID::ID EditorFileSystemDirectory::get_file_uid(int p_idx) const {
+	ERR_FAIL_INDEX_V(p_idx, files.size(), ResourceUID::INVALID_ID);
+	return files[p_idx]->uid;
+}
+
 Vector<String> EditorFileSystemDirectory::get_file_deps(int p_idx) const {
 	ERR_FAIL_INDEX_V(p_idx, files.size(), Vector<String>());
 	Vector<String> deps;
@@ -333,14 +338,15 @@ void EditorFileSystem::_first_scan_filesystem() {
 	ep.step(TTR("Verifying GDExtensions..."), 2, true);
 	GDExtensionManager::get_singleton()->ensure_extensions_loaded(extensions);
 
-	// Now that all the global class names should be loaded, create autoloads and plugins.
-	// This is done after loading the global class names because autoloads and plugins can use
-	// global class names.
-	ep.step(TTR("Creating autoload scripts..."), 3, true);
-	ProjectSettingsEditor::get_singleton()->init_autoloads();
-
-	ep.step(TTR("Initializing plugins..."), 4, true);
+	// Now that all the global class names should be loaded, create plugins.
+	// This is done after loading the global class names because plugins can use global class names.
+	ep.step(TTR("Initializing plugins..."), 3, true);
 	EditorNode::get_singleton()->init_plugins();
+
+	// Now that plugins and global class names should be loaded, create autoloads.
+	// This is done last because autoloads can use global class names and plugins.
+	ep.step(TTR("Creating autoload scripts..."), 4, true);
+	ProjectSettingsEditor::get_singleton()->init_autoloads();
 
 	ep.step(TTR("Starting file scan..."), 5, true);
 }
@@ -2785,7 +2791,7 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 
 	//try to obtain existing params
 
-	HashMap<StringName, Variant> params = p_custom_options;
+	HashMap<StringName, Variant> params(p_custom_options);
 	String importer_name; //empty by default though
 
 	if (!p_custom_importer.is_empty()) {
@@ -3684,6 +3690,7 @@ bool EditorFileSystem::_scan_extensions() {
 void EditorFileSystem::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_filesystem"), &EditorFileSystem::get_filesystem);
 	ClassDB::bind_method(D_METHOD("is_scanning"), &EditorFileSystem::is_scanning);
+	ClassDB::bind_method(D_METHOD("is_importing"), &EditorFileSystem::is_importing);
 	ClassDB::bind_method(D_METHOD("get_scanning_progress"), &EditorFileSystem::get_scanning_progress);
 	ClassDB::bind_method(D_METHOD("scan"), &EditorFileSystem::scan);
 	ClassDB::bind_method(D_METHOD("scan_sources"), &EditorFileSystem::scan_changes);
