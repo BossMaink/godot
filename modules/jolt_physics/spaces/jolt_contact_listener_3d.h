@@ -35,16 +35,13 @@
 #include "core/templates/hash_set.h"
 #include "core/templates/hashfuncs.h"
 #include "core/templates/local_vector.h"
-#include "core/templates/safe_refcount.h"
 #include "core/variant/variant.h"
 
-#include "Jolt/Jolt.h"
+#include <Jolt/Jolt.h>
 
-#include "Jolt/Physics/Body/Body.h"
-#include "Jolt/Physics/Collision/ContactListener.h"
-#include "Jolt/Physics/SoftBody/SoftBodyContactListener.h"
-
-#include <new>
+#include <Jolt/Physics/Body/Body.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
+#include <Jolt/Physics/SoftBody/SoftBodyContactListener.h>
 
 class JoltArea3D;
 class JoltBody3D;
@@ -88,9 +85,9 @@ class JoltContactListener3D final
 
 	HashMap<JPH::SubShapeIDPair, Manifold, ShapePairHasher> manifolds_by_shape_pair;
 	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_overlaps;
-	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_soft_body_overlaps;
 	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_enters;
 	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_exits;
+	LocalVector<JPH::SubShapeIDPair> area_soft_body_overlaps;
 	Mutex write_mutex;
 	JoltSpace3D *space = nullptr;
 

@@ -37,8 +37,8 @@
 #include "../objects/jolt_soft_body_3d.h"
 #include "jolt_space_3d.h"
 
-#include "Jolt/Physics/Collision/EstimateCollisionResponse.h"
-#include "Jolt/Physics/SoftBody/SoftBodyManifold.h"
+#include <Jolt/Physics/Collision/EstimateCollisionResponse.h>
+#include <Jolt/Physics/SoftBody/SoftBodyManifold.h>
 
 void JoltContactListener3D::OnContactAdded(const JPH::Body &p_body1, const JPH::Body &p_body2, const JPH::ContactManifold &p_manifold, JPH::ContactSettings &p_settings) {
 	_try_override_collision_response(p_body1, p_body2, p_settings);
@@ -447,7 +447,7 @@ void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, con
 	const MutexLock write_lock(write_mutex);
 
 	if (p_area.can_monitor(p_body)) {
-		area_soft_body_overlaps.insert(p_shape_pair);
+		area_soft_body_overlaps.push_back(p_shape_pair);
 		if (!area_exits.erase(p_shape_pair)) {
 			area_enters.insert(p_shape_pair);
 		}

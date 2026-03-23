@@ -42,6 +42,7 @@
 #include "editor/script/script_editor_plugin.h"
 
 #ifndef GDSCRIPT_NO_LSP
+#include "language_server/gdscript_language_protocol.h"
 #include "language_server/gdscript_language_server.h"
 #endif
 #endif // TOOLS_ENABLED
@@ -52,6 +53,7 @@
 
 #include "core/io/file_access.h"
 #include "core/io/resource_loader.h"
+#include "core/object/class_db.h"
 
 #ifdef TOOLS_ENABLED
 #include "editor/editor_node.h"

@@ -38,18 +38,22 @@ STATIC_ASSERT_INCOMPLETE_TYPE(class, Shader);
 STATIC_ASSERT_INCOMPLETE_TYPE(class, OS);
 STATIC_ASSERT_INCOMPLETE_TYPE(class, Engine);
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/io/resource.h"
 #include "core/io/resource_loader.h"
+#include "core/object/class_db.h"
 #include "core/object/message_queue.h"
 #include "core/object/script_language.h"
 #include "core/string/print_string.h"
 #include "scene/animation/tween.h"
 #include "scene/main/instance_placeholder.h"
 #include "scene/main/multiplayer_api.h"
+#include "scene/main/scene_tree.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
 #include "scene/resources/packed_scene.h"
+#include "servers/display/accessibility_server.h"
 
 #ifdef DEBUG_ENABLED
 #include "scene/debugger/scene_debugger.h"
@@ -65,7 +69,7 @@ void Node::_notification(int p_notification) {
 	switch (p_notification) {
 		case NOTIFICATION_ACCESSIBILITY_INVALIDATE: {
 			if (data.accessibility_element.is_valid()) {
-				DisplayServer::get_singleton()->accessibility_free_element(data.accessibility_element);
+				AccessibilityServer::get_singleton()->free_element(data.accessibility_element);
 				data.accessibility_element = RID();
 			}
 		} break;
@@ -74,7 +78,7 @@ void Node::_notification(int p_notification) {
 			RID ae = get_accessibility_element();
 			ERR_FAIL_COND(ae.is_null());
 
-			DisplayServer::get_singleton()->accessibility_update_set_name(ae, get_name());
+			AccessibilityServer::get_singleton()->update_set_name(ae, get_name());
 
 			// Node children.
 			if (!accessibility_override_tree_hierarchy()) {
@@ -87,7 +91,7 @@ void Node::_notification(int p_notification) {
 					if (child_node->is_part_of_edited_scene()) {
 						continue;
 					}
-					DisplayServer::get_singleton()->accessibility_update_add_child(ae, child_node->get_accessibility_element());
+					AccessibilityServer::get_singleton()->update_add_child(ae, child_node->get_accessibility_element());
 				}
 			}
 		} break;
@@ -193,7 +197,7 @@ void Node::_notification(int p_notification) {
 
 			if (data.tree->is_accessibility_supported() && !is_part_of_edited_scene()) {
 				if (data.accessibility_element.is_valid()) {
-					DisplayServer::get_singleton()->accessibility_free_element(data.accessibility_element);
+					AccessibilityServer::get_singleton()->free_element(data.accessibility_element);
 					data.accessibility_element = RID();
 				}
 				data.tree->_accessibility_notify_change(this, true);
@@ -903,8 +907,7 @@ bool Node::can_process_notification(int p_what) const {
 }
 
 bool Node::can_process() const {
-	ERR_FAIL_COND_V(!is_inside_tree(), false);
-	return !data.tree->is_suspended() && _can_process(data.tree->is_paused());
+	return is_inside_tree() && !data.tree->is_suspended() && _can_process(data.tree->is_paused());
 }
 
 bool Node::_can_process(bool p_paused) const {
@@ -966,6 +969,10 @@ void Node::set_physics_interpolation_mode(PhysicsInterpolationMode p_mode) {
 	if (is_physics_interpolated() && is_inside_tree()) {
 		propagate_notification(NOTIFICATION_RESET_PHYSICS_INTERPOLATION);
 	}
+}
+
+bool Node::is_physics_interpolated_and_enabled() const {
+	return SceneTree::is_fti_enabled() && is_physics_interpolated();
 }
 
 void Node::reset_physics_interpolation() {
@@ -2839,6 +2846,19 @@ Node *Node::_duplicate(int p_flags, HashMap<const Node *, Node *> *r_duplimap) c
 				}
 			}
 		}
+
+		for (List<const Node *>::Element *N = node_tree.front(); N; N = N->next()) {
+			const Node *source_node = N->get();
+			if (source_node->get_scene_file_path().is_empty()) {
+				continue;
+			}
+
+			NodePath relative_path = get_path_to(source_node);
+			Node *duplicated_node = node->get_node_or_null(relative_path);
+			ERR_CONTINUE(!duplicated_node);
+
+			duplicated_node->data.editable_instance = source_node->data.editable_instance;
+		}
 	}
 
 	if (get_name() != String()) {
@@ -3718,8 +3738,8 @@ RID Node::get_accessibility_element() const {
 	}
 	if (unlikely(data.accessibility_element.is_null())) {
 		Window *w = get_non_popup_window();
-		if (w && w->get_window_id() != DisplayServer::INVALID_WINDOW_ID && get_window()->is_visible()) {
-			data.accessibility_element = DisplayServer::get_singleton()->accessibility_create_element(w->get_window_id(), DisplayServer::ROLE_CONTAINER);
+		if (w && w->get_window_id() != DisplayServerEnums::INVALID_WINDOW_ID && get_window()->is_visible()) {
+			data.accessibility_element = AccessibilityServer::get_singleton()->create_element(w->get_window_id(), AccessibilityServerEnums::ROLE_CONTAINER);
 		}
 	}
 	return data.accessibility_element;
@@ -3956,6 +3976,8 @@ void Node::_bind_methods() {
 	BIND_CONSTANT(NOTIFICATION_APPLICATION_FOCUS_IN);
 	BIND_CONSTANT(NOTIFICATION_APPLICATION_FOCUS_OUT);
 	BIND_CONSTANT(NOTIFICATION_TEXT_SERVER_CHANGED);
+	BIND_CONSTANT(NOTIFICATION_APPLICATION_PIP_MODE_ENTERED);
+	BIND_CONSTANT(NOTIFICATION_APPLICATION_PIP_MODE_EXITED);
 
 	BIND_CONSTANT(NOTIFICATION_ACCESSIBILITY_UPDATE);
 	BIND_CONSTANT(NOTIFICATION_ACCESSIBILITY_INVALIDATE);

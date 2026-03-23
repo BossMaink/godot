@@ -36,6 +36,7 @@
 #include "gltf_template_convert.h"
 #include "skin_tool.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/crypto/crypto_core.h"
 #include "core/io/config_file.h"
@@ -44,9 +45,9 @@
 #include "core/io/file_access_memory.h"
 #include "core/io/json.h"
 #include "core/io/stream_peer.h"
+#include "core/object/class_db.h"
 #include "core/object/object_id.h"
 #include "core/version.h"
-#include "scene/2d/node_2d.h"
 #include "scene/3d/bone_attachment_3d.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/importer_mesh_instance_3d.h"
@@ -1436,7 +1437,7 @@ Error GLTFDocument::_parse_meshes(Ref<GLTFState> p_state) {
 		TypedArray<Material> instance_materials;
 
 		for (int j = 0; j < primitives.size(); j++) {
-			uint64_t flags = RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
+			uint64_t flags = RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
 			Dictionary mesh_prim = primitives[j];
 
 			Array array;
@@ -1745,7 +1746,7 @@ Error GLTFDocument::_parse_meshes(Ref<GLTFState> p_state) {
 			}
 
 			if (p_state->force_disable_compression || is_mesh_2d || !a.has("POSITION") || !a.has("NORMAL") || mesh_prim.has("targets") || (a.has("JOINTS_0") || a.has("JOINTS_1"))) {
-				flags &= ~RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
+				flags &= ~RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
 			}
 
 			Ref<SurfaceTool> mesh_surface_tool;
@@ -1761,19 +1762,19 @@ Error GLTFDocument::_parse_meshes(Ref<GLTFState> p_state) {
 			}
 			array = mesh_surface_tool->commit_to_arrays();
 
-			if ((flags & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) && a.has("NORMAL") && (a.has("TANGENT") || generate_tangents)) {
+			if ((flags & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES) && a.has("NORMAL") && (a.has("TANGENT") || generate_tangents)) {
 				// Compression is enabled, so let's validate that the normals and tangents are correct.
 				Vector<Vector3> normals = array[Mesh::ARRAY_NORMAL];
 				Vector<float> tangents = array[Mesh::ARRAY_TANGENT];
 				if (unlikely(tangents.size() < normals.size() * 4)) {
 					ERR_PRINT("glTF import: Mesh " + itos(i) + " has invalid tangents.");
-					flags &= ~RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
+					flags &= ~RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
 				} else {
 					for (int vert = 0; vert < normals.size(); vert++) {
 						Vector3 tan = Vector3(tangents[vert * 4 + 0], tangents[vert * 4 + 1], tangents[vert * 4 + 2]);
 						if (std::abs(tan.dot(normals[vert])) > 0.0001) {
 							// Tangent is not perpendicular to the normal, so we can't use compression.
-							flags &= ~RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
+							flags &= ~RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
 						}
 					}
 				}
@@ -3517,9 +3518,7 @@ Error GLTFDocument::_serialize_animations(Ref<GLTFState> p_state) {
 	}
 	for (int32_t player_i = 0; player_i < p_state->animation_players.size(); player_i++) {
 		AnimationPlayer *animation_player = p_state->animation_players[player_i];
-		List<StringName> animations;
-		animation_player->get_animation_list(&animations);
-		for (const StringName &animation_name : animations) {
+		for (const StringName &animation_name : animation_player->get_sorted_animation_list()) {
 			_convert_animation(p_state, animation_player, animation_name);
 		}
 	}
@@ -4290,7 +4289,8 @@ void GLTFDocument::_convert_grid_map_to_gltf(GridMap *p_grid_map, GLTFNodeIndex 
 #else
 	const Array &cells = p_grid_map->get_used_cells();
 	for (int32_t k = 0; k < cells.size(); k++) {
-		GLTFNode *new_gltf_node = memnew(GLTFNode);
+		Ref<GLTFNode> new_gltf_node;
+		new_gltf_node.instantiate();
 		p_gltf_node->children.push_back(p_state->nodes.size());
 		p_state->nodes.push_back(new_gltf_node);
 		Vector3 cell_location = cells[k];
@@ -6550,9 +6550,13 @@ Error GLTFDocument::_parse(Ref<GLTFState> p_state, const String &p_path, Ref<Fil
 	document_extensions.clear();
 	for (Ref<GLTFDocumentExtension> ext : all_document_extensions) {
 		ERR_CONTINUE(ext.is_null());
-		err = ext->import_preflight(p_state, p_state->json["extensionsUsed"]);
+		Ref<GLTFDocumentExtension> ext_dup = ext;
+		if (ClassDB::is_class_exposed(ext->get_class_name())) {
+			ext_dup = ext->duplicate();
+		}
+		err = ext_dup->import_preflight(p_state, p_state->json["extensionsUsed"]);
 		if (err == OK) {
-			document_extensions.push_back(ext);
+			document_extensions.push_back(ext_dup);
 		}
 	}
 
@@ -7116,9 +7120,13 @@ Error GLTFDocument::append_from_scene(Node *p_node, Ref<GLTFState> p_state, uint
 	document_extensions.clear();
 	for (Ref<GLTFDocumentExtension> ext : all_document_extensions) {
 		ERR_CONTINUE(ext.is_null());
-		Error err = ext->export_preflight(state, p_node);
+		Ref<GLTFDocumentExtension> ext_dup = ext;
+		if (ClassDB::is_class_exposed(ext->get_class_name())) {
+			ext_dup = ext->duplicate();
+		}
+		Error err = ext_dup->export_preflight(state, p_node);
 		if (err == OK) {
-			document_extensions.push_back(ext);
+			document_extensions.push_back(ext_dup);
 		}
 	}
 	// Add the root node(s) and their descendants to the state.

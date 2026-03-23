@@ -30,10 +30,12 @@
 
 #include "lightmap_gi.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/io/config_file.h"
 #include "core/math/delaunay_3d.h"
 #include "core/math/geometry_3d.h"
+#include "core/object/class_db.h"
 #include "core/object/object.h"
 #include "scene/3d/light_3d.h"
 #include "scene/3d/lightmap_probe.h"
@@ -42,8 +44,17 @@
 #include "scene/resources/environment.h"
 #include "scene/resources/image_texture.h"
 #include "scene/resources/sky.h"
+#include "servers/rendering/rendering_server.h"
 
-#include "modules/modules_enabled.gen.h" // For lightmapper_rd.
+#include "modules/modules_enabled.gen.h" // IWYU pragma: keep. For lightmapper_rd.
+
+#ifdef MODULE_LIGHTMAPPER_RD_ENABLED
+#include "servers/display/display_server.h"
+#endif
+
+#if defined(ANDROID_ENABLED) || defined(APPLE_EMBEDDED_ENABLED)
+#include "core/os/os.h"
+#endif
 
 void LightmapGIData::add_user(const NodePath &p_path, const Rect2 &p_uv_scale, int p_slice_index, int32_t p_sub_instance) {
 	User user;
@@ -214,7 +225,7 @@ bool LightmapGIData::_is_using_packed_directional() const {
 }
 
 void LightmapGIData::update_shadowmask_mode(ShadowmaskMode p_mode) {
-	RS::get_singleton()->lightmap_set_shadowmask_mode(lightmap, (RS::ShadowmaskMode)p_mode);
+	RS::get_singleton()->lightmap_set_shadowmask_mode(lightmap, (RSE::ShadowmaskMode)p_mode);
 }
 
 LightmapGIData::ShadowmaskMode LightmapGIData::get_shadowmask_mode() const {
@@ -963,8 +974,8 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 
 			ERR_FAIL_COND_V(images.is_empty(), BAKE_ERROR_CANT_CREATE_IMAGE);
 
-			Ref<Image> albedo = images[RS::BAKE_CHANNEL_ALBEDO_ALPHA];
-			Ref<Image> orm = images[RS::BAKE_CHANNEL_ORM];
+			Ref<Image> albedo = images[RSE::BAKE_CHANNEL_ALBEDO_ALPHA];
+			Ref<Image> orm = images[RSE::BAKE_CHANNEL_ORM];
 
 			//multiply albedo by metal
 
@@ -1007,7 +1018,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 				md.albedo_on_uv2->set_data(lightmap_size.width, lightmap_size.height, false, Image::FORMAT_RGBA8, albedom);
 			}
 
-			md.emission_on_uv2 = images[RS::BAKE_CHANNEL_EMISSION];
+			md.emission_on_uv2 = images[RSE::BAKE_CHANNEL_EMISSION];
 			if (md.emission_on_uv2->get_format() != Image::FORMAT_RGBAH) {
 				md.emission_on_uv2->convert(Image::FORMAT_RGBAH);
 			}

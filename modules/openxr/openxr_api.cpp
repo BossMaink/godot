@@ -30,16 +30,23 @@
 
 #include "openxr_api.h"
 
+#include "action_map/openxr_interaction_profile_metadata.h"
 #include "openxr_interface.h"
 #include "openxr_util.h"
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/object/callable_mp.h"
 #include "core/os/memory.h"
 #include "core/profiling/profiling.h"
 #include "core/version.h"
+#include "servers/rendering/rendering_server.h"
 
-#include "openxr_platform_inc.h"
+#ifdef ANDROID_ENABLED
+#include "core/os/os.h"
+#endif
+
+#include "openxr_platform_inc.h" // IWYU pragma: keep.
 
 #ifdef VULKAN_ENABLED
 #include "extensions/platform/openxr_vulkan_extension.h"
@@ -2266,6 +2273,68 @@ void OpenXRAPI::_update_main_swapchain_size_rt() {
 		print_verbose(String(" - recommended render height: ") + itos(openxr_api->view_configuration_views[i].recommendedImageRectHeight));
 	}
 #endif
+}
+
+void OpenXRAPI::allocate_view_buffers(uint32_t p_view_count, bool p_submit_depth_buffer) {
+	// If we're rendering on a separate thread, we may still be processing the last frame, don't communicate this till we're ready...
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_allocate_view_buffers_rt).bind(p_view_count, p_submit_depth_buffer));
+}
+
+void OpenXRAPI::set_render_session_running(bool p_is_running) {
+	// If we're rendering on a separate thread, we may still be processing the last frame, don't communicate this till we're ready...
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_set_render_session_running_rt).bind(p_is_running));
+}
+
+void OpenXRAPI::set_render_display_info(XrTime p_predicted_display_time, bool p_should_render) {
+	// If we're rendering on a separate thread, we may still be processing the last frame, don't communicate this till we're ready...
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_set_render_display_info_rt).bind(p_predicted_display_time, p_should_render));
+}
+
+void OpenXRAPI::set_render_play_space(XrSpace p_play_space) {
+	// If we're rendering on a separate thread, we may still be processing the last frame, don't communicate this till we're ready...
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_set_render_play_space_rt).bind(uint64_t(p_play_space)));
+}
+
+void OpenXRAPI::set_render_environment_blend_mode(XrEnvironmentBlendMode p_mode) {
+	// If we're rendering on a separate thread, we may still be processing the last frame, don't communicate this till we're ready...
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_set_render_environment_blend_mode_rt).bind((int32_t)p_mode));
+}
+
+void OpenXRAPI::set_render_state_multiplier(double p_render_target_size_multiplier) {
+	// If we're rendering on a separate thread, we may still be processing the last frame, don't communicate this till we're ready...
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_set_render_state_multiplier_rt).bind(p_render_target_size_multiplier));
+}
+
+void OpenXRAPI::set_render_state_render_region(const Rect2i &p_render_region) {
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_set_render_state_render_region_rt).bind(p_render_region));
+}
+
+void OpenXRAPI::update_main_swapchain_size() {
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	ERR_FAIL_NULL(rendering_server);
+
+	rendering_server->call_on_render_thread(callable_mp_static(&OpenXRAPI::_update_main_swapchain_size_rt));
 }
 
 bool OpenXRAPI::process() {
