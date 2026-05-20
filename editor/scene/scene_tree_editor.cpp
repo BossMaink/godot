@@ -645,8 +645,9 @@ void SceneTreeEditor::_update_node(Node *p_node, TreeItem *p_item, bool p_part_o
 	if (selected == p_node) {
 		if (!editor_selection) {
 			p_item->select(0);
+		} else {
+			p_item->set_as_cursor(0);
 		}
-		p_item->set_as_cursor(0);
 	}
 }
 
@@ -1133,7 +1134,7 @@ bool SceneTreeEditor::_update_filter_helper(TreeItem *p_parent, bool p_scroll_to
 			if (n && editor_selection->is_selected(n)) {
 				if (p_scroll_to_selected) {
 					// Needs to be deferred to account for possible root visibility change.
-					callable_mp(tree, &Tree::scroll_to_item).call_deferred(p_parent, false);
+					callable_mp(tree, &Tree::scroll_to_item).call_deferred(Variant(p_parent), false);
 				} else {
 					r_last_selected = p_parent;
 				}
@@ -1481,7 +1482,6 @@ void SceneTreeEditor::set_selected(Node *p_node, bool p_emit_selected) {
 				node = node->get_parent();
 			}
 			item->select(0);
-			item->set_as_cursor(0);
 			tree->ensure_cursor_is_visible();
 		} else {
 			// Ensure the node is selected and visible for the user if the node
@@ -1497,7 +1497,6 @@ void SceneTreeEditor::set_selected(Node *p_node, bool p_emit_selected) {
 			}
 			if (!collapsed) {
 				item->select(0);
-				item->set_as_cursor(0);
 				tree->ensure_cursor_is_visible();
 			}
 		}
