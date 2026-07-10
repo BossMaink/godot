@@ -1475,6 +1475,9 @@ void TreeItem::set_button_tooltip_text(int p_column, int p_index, const String &
 void TreeItem::set_button(int p_column, int p_index, const Ref<Texture2D> &p_button) {
 	ERR_FAIL_COND(p_button.is_null());
 	ERR_FAIL_INDEX(p_column, cells.size());
+	if (p_index < 0) {
+		p_index += cells[p_column].buttons.size();
+	}
 	ERR_FAIL_INDEX(p_index, cells[p_column].buttons.size());
 
 	if (cells[p_column].buttons[p_index].texture == p_button) {
@@ -1489,6 +1492,9 @@ void TreeItem::set_button(int p_column, int p_index, const Ref<Texture2D> &p_but
 
 void TreeItem::set_button_description(int p_column, int p_index, const String &p_description) {
 	ERR_FAIL_INDEX(p_column, cells.size());
+	if (p_index < 0) {
+		p_index += cells[p_column].buttons.size();
+	}
 	ERR_FAIL_INDEX(p_index, cells[p_column].buttons.size());
 
 	if (cells[p_column].buttons[p_index].description == p_description) {
@@ -1504,6 +1510,9 @@ void TreeItem::set_button_description(int p_column, int p_index, const String &p
 
 void TreeItem::set_button_color(int p_column, int p_index, const Color &p_color) {
 	ERR_FAIL_INDEX(p_column, cells.size());
+	if (p_index < 0) {
+		p_index += cells[p_column].buttons.size();
+	}
 	ERR_FAIL_INDEX(p_index, cells[p_column].buttons.size());
 
 	if (cells[p_column].buttons[p_index].color == p_color) {
@@ -1516,6 +1525,9 @@ void TreeItem::set_button_color(int p_column, int p_index, const Color &p_color)
 
 void TreeItem::set_button_disabled(int p_column, int p_index, bool p_disabled) {
 	ERR_FAIL_INDEX(p_column, cells.size());
+	if (p_index < 0) {
+		p_index += cells[p_column].buttons.size();
+	}
 	ERR_FAIL_INDEX(p_index, cells[p_column].buttons.size());
 
 	if (cells[p_column].buttons[p_index].disabled == p_disabled) {
@@ -3871,8 +3883,8 @@ Rect2 Tree::_get_content_rect() const {
 void Tree::gui_input(const Ref<InputEvent> &p_event) {
 	ERR_FAIL_COND(p_event.is_null());
 
-	using_native_touch = false;
 	if (p_event->get_device() != InputEvent::DEVICE_ID_EMULATION) {
+		using_native_touch = false;
 		Ref<InputEventScreenTouch> touch = p_event;
 		Ref<InputEventScreenDrag> drag = p_event;
 		if (touch.is_valid() || drag.is_valid()) {
@@ -4028,6 +4040,70 @@ void Tree::gui_input(const Ref<InputEvent> &p_event) {
 			}
 			prev->select(selected_col);
 		}
+		ensure_cursor_is_visible();
+	} else if (p_event->is_action("ui_home") && p_event->is_pressed() && !p_event->is_echo()) {
+		if (!cursor_can_exit_tree) {
+			accept_event();
+		}
+
+		if (!root) {
+			return;
+		}
+
+		TreeItem *first = hide_root ? root->get_next_visible() : root;
+		if (!first || first == selected_item) {
+			return;
+		}
+
+		int col = MAX(selected_col, 0);
+
+		if (select_mode == SELECT_MULTI) {
+			selected_item = first;
+			emit_signal(SNAME("cell_selected"));
+			queue_accessibility_update();
+			queue_redraw();
+		} else {
+			while (first && !first->cells[col].selectable) {
+				first = first->get_next_visible();
+			}
+			if (!first) {
+				return; // Do nothing.
+			}
+			first->select(col);
+		}
+
+		ensure_cursor_is_visible();
+	} else if (p_event->is_action("ui_end") && p_event->is_pressed() && !p_event->is_echo()) {
+		if (!cursor_can_exit_tree) {
+			accept_event();
+		}
+
+		if (!root) {
+			return;
+		}
+
+		TreeItem *last = root->get_prev_visible(true);
+		if (!last || (hide_root && last == root) || last == selected_item) {
+			return;
+		}
+
+		int col = MAX(selected_col, 0);
+
+		if (select_mode == SELECT_MULTI) {
+			selected_item = last;
+			emit_signal(SNAME("cell_selected"));
+			queue_accessibility_update();
+			queue_redraw();
+		} else {
+			while (last && !last->cells[col].selectable) {
+				last = last->get_prev_visible();
+			}
+			if (!last) {
+				return; // Do nothing.
+			}
+			last->select(col);
+		}
+
 		ensure_cursor_is_visible();
 	} else if (p_event->is_action("ui_select") && p_event->is_pressed()) {
 		if (select_mode == SELECT_MULTI) {
@@ -4310,7 +4386,7 @@ void Tree::gui_input(const Ref<InputEvent> &p_event) {
 					drag_accum = 0;
 					drag_from = v_scroll->get_value();
 
-					drag_touching = DisplayServer::get_singleton()->is_touchscreen_available();
+					drag_touching = using_native_touch && DisplayServer::get_singleton()->is_touchscreen_available();
 					drag_touching_deaccel = false;
 					if (drag_touching) {
 						set_process_internal(true);
@@ -5160,7 +5236,10 @@ void Tree::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_VISIBILITY_CHANGED: {
-			drag_touching = false;
+			if (!is_visible()) {
+				drag_touching = false;
+				popup_editor->hide();
+			}
 		} break;
 
 		case NOTIFICATION_DRAG_END: {
@@ -5606,6 +5685,7 @@ void Tree::_notification(int p_what) {
 					rendering_server->canvas_item_set_custom_rect(last_sticky_ci, !is_visibility_clip_disabled(), Rect2(0, last_ofs.y + draw_ofs.y, get_size().x, sticky_stack_end - last_ofs.y));
 					rendering_server->canvas_item_set_custom_rect(content_ci, !is_visibility_clip_disabled(), main_clip_rect.grow_side(SIDE_TOP, -(sticky_stack_end + content_rect.position.y)));
 					rendering_server->canvas_item_set_custom_rect(stylebox_ci, !is_visibility_clip_disabled(), main_clip_rect.grow_side(SIDE_TOP, -(sticky_stack_end + content_rect.position.y)));
+					rendering_server->canvas_item_set_custom_rect(custom_ci, !is_visibility_clip_disabled(), main_clip_rect.grow_side(SIDE_TOP, -(sticky_stack_end + content_rect.position.y)));
 					rendering_server->canvas_item_set_custom_rect(header_ci, !is_visibility_clip_disabled(), header_clip_rect.grow_side(SIDE_BOTTOM, last_ofs.y + content_rect.position.y));
 				}
 			}
@@ -5642,7 +5722,7 @@ void Tree::_notification(int p_what) {
 
 		case NOTIFICATION_RESIZED:
 		case NOTIFICATION_TRANSFORM_CHANGED: {
-			if (popup_edited_item != nullptr) {
+			if (popup_edited_item != nullptr && popup_editor->is_visible()) {
 				Rect2 rect = _get_item_focus_rect(popup_edited_item);
 
 				popup_editor->set_position(get_screen_position() + rect.position);
@@ -7075,7 +7155,7 @@ int Tree::get_drop_section_at_position(const Point2 &p_pos) const {
 }
 
 bool Tree::can_drop_data(const Point2 &p_point, const Variant &p_data) const {
-	if (using_native_touch) {
+	if (drag_touching) {
 		// Disable data drag & drop when touch dragging.
 		return false;
 	}
@@ -7084,7 +7164,7 @@ bool Tree::can_drop_data(const Point2 &p_point, const Variant &p_data) const {
 }
 
 Variant Tree::get_drag_data(const Point2 &p_point) {
-	if (using_native_touch) {
+	if (drag_touching) {
 		// Disable data drag & drop when touch dragging.
 		return Variant();
 	}
@@ -7653,7 +7733,6 @@ Tree::~Tree() {
 	RenderingServer::get_singleton()->free_rid(content_ci);
 	RenderingServer::get_singleton()->free_rid(custom_ci);
 	RenderingServer::get_singleton()->free_rid(header_ci);
-	RenderingServer::get_singleton()->free_rid(custom_ci);
 	RenderingServer::get_singleton()->free_rid(stylebox_ci);
 	RenderingServer::get_singleton()->free_rid(last_sticky_ci);
 }

@@ -404,7 +404,7 @@ uint32_t ClassDB::get_api_hash(APIType p_api) {
 			List<StringName> snames;
 
 			for (const KeyValue<StringName, MethodBind *> &F : t->method_map) {
-				String name = F.key.operator String();
+				String name = F.key.string();
 
 				ERR_CONTINUE(name.is_empty());
 
@@ -862,7 +862,7 @@ bool ClassDB::can_instantiate(const StringName &p_class) {
 
 use_script:
 	Ref<Script> scr = ResourceLoader::load(script_path);
-	return scr.is_valid() && scr->is_valid() && !scr->is_abstract();
+	return scr.is_valid() && scr->is_script_valid() && !scr->is_abstract();
 }
 
 bool ClassDB::is_abstract(const StringName &p_class) {
@@ -894,7 +894,7 @@ bool ClassDB::is_abstract(const StringName &p_class) {
 
 use_script:
 	Ref<Script> scr = ResourceLoader::load(script_path);
-	return scr.is_valid() && scr->is_valid() && scr->is_abstract();
+	return scr.is_valid() && scr->is_script_valid() && scr->is_abstract();
 }
 
 bool ClassDB::is_virtual(const StringName &p_class) {
@@ -920,7 +920,7 @@ bool ClassDB::is_virtual(const StringName &p_class) {
 
 use_script:
 	Ref<Script> scr = ResourceLoader::load(script_path);
-	return scr.is_valid() && scr->is_valid() && scr->is_abstract();
+	return scr.is_valid() && scr->is_script_valid() && scr->is_abstract();
 }
 
 bool ClassDB::is_gdextension(const StringName &p_class) {
