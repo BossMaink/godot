@@ -176,7 +176,7 @@ protected:
 public:
 	static GodotSharp *get_singleton() { return singleton; }
 
-	void reload_assemblies(bool p_soft_reload);
+	void reload_assemblies();
 
 	GodotSharp();
 	~GodotSharp();

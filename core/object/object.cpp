@@ -180,9 +180,7 @@ bool Object::_predelete() {
 
 	// Destruction order starts with the most derived class, and progresses towards the base Object class:
 	// Script subclasses -> GDExtension subclasses -> C++ subclasses -> Object
-	if (script_instance) {
-		memdelete(script_instance);
-	}
+	memdelete(script_instance);
 	script_instance = nullptr;
 
 	if (_extension) {
@@ -269,16 +267,8 @@ void Object::set(const StringName &p_name, const Variant &p_value, bool *r_valid
 		return;
 
 	} else {
-		Variant **V = metadata_properties.getptr(p_name);
-		if (V) {
-			**V = p_value;
-			if (r_valid) {
-				*r_valid = true;
-			}
-			return;
-		} else if (p_name.string().begins_with("metadata/")) {
-			// Must exist, otherwise duplicate() will not work.
-			set_meta(p_name.string().replace_first("metadata/", ""), p_value);
+		if (p_name.string().begins_with("metadata/")) {
+			set_meta(p_name.string().substr(strlen("metadata/")), p_value);
 			if (r_valid) {
 				*r_valid = true;
 			}
@@ -351,14 +341,21 @@ Variant Object::get(const StringName &p_name, bool *r_valid) const {
 		return ret;
 	}
 
-	const Variant *const *V = metadata_properties.getptr(p_name);
-
-	if (V) {
-		ret = **V;
-		if (r_valid) {
-			*r_valid = true;
+	if (p_name.string().begins_with("metadata/")) {
+		const StringName meta_key = p_name.string().substr(strlen("metadata/"));
+		const Variant *V = metadata.getptr(meta_key);
+		if (V) {
+			ret = *V;
+			if (r_valid) {
+				*r_valid = true;
+			}
+			return ret;
+		} else {
+			if (r_valid) {
+				*r_valid = false;
+			}
+			return Variant();
 		}
-		return ret;
 
 	} else {
 #ifdef TOOLS_ENABLED
@@ -1000,9 +997,7 @@ void Object::set_script_instance(ScriptInstance *p_instance) {
 		return;
 	}
 
-	if (script_instance) {
-		memdelete(script_instance);
-	}
+	memdelete(script_instance);
 
 	script_instance = p_instance;
 }
@@ -1021,7 +1016,6 @@ void Object::set_meta(const StringName &p_name, const Variant &p_value) {
 			metadata.erase(p_name);
 
 			const String &sname = p_name;
-			metadata_properties.erase("metadata/" + sname);
 			if (!sname.begins_with("_")) {
 				// Metadata starting with _ don't show up in the inspector, so no need to update.
 				notify_property_list_changed();
@@ -1035,10 +1029,9 @@ void Object::set_meta(const StringName &p_name, const Variant &p_value) {
 		E->value = p_value;
 	} else {
 		ERR_FAIL_COND_MSG(!p_name.string().is_valid_unicode_identifier(), vformat("Invalid metadata identifier: '%s'.", p_name));
-		Variant *V = &metadata.insert(p_name, p_value)->value;
+		metadata.insert(p_name, p_value);
 
 		const String &sname = p_name;
-		metadata_properties["metadata/" + sname] = V;
 		if (!sname.begins_with("_")) {
 			notify_property_list_changed();
 		}
@@ -2366,9 +2359,7 @@ Object::~Object() {
 		memfree(_instance_bindings);
 	}
 
-	if (signal_mutex) {
-		memdelete(signal_mutex);
-	}
+	memdelete(signal_mutex);
 }
 
 bool predelete_handler(Object *p_object) {

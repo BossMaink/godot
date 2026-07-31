@@ -3329,7 +3329,6 @@ int Tree::propagate_mouse_event(const Point2i &p_pos, int x_ofs, int y_ofs, int 
 
 		// Editing.
 		bool bring_up_editor = allow_reselect ? (c.selected && already_selected) : c.selected;
-		String editor_text = c.text;
 
 		switch (c.mode) {
 			case TreeItem::CELL_MODE_STRING: {
@@ -3408,7 +3407,6 @@ int Tree::propagate_mouse_event(const Point2i &p_pos, int x_ofs, int y_ofs, int 
 						bring_up_editor = false;
 
 					} else {
-						editor_text = String::num(p_item->cells[col].val, Math::range_step_decimals(p_item->cells[col].step));
 						if (select_mode == SELECT_MULTI && get_viewport()->get_processed_events_count() == focus_in_id) {
 							bring_up_editor = false;
 						}
@@ -5254,8 +5252,12 @@ void Tree::_notification(int p_what) {
 		case NOTIFICATION_DRAG_BEGIN: {
 			single_select_defer = nullptr;
 			if (theme_cache.scroll_speed > 0) {
-				scrolling = true;
-				set_process_internal(true);
+				const Dictionary drag_data = get_viewport()->gui_get_drag_data();
+				// Enable scrolling, unless dragging a tab.
+				if (drag_data.get("type", "").operator String() != "tab") {
+					scrolling = true;
+					set_process_internal(true);
+				}
 			}
 		} break;
 
@@ -5641,7 +5643,7 @@ void Tree::_notification(int p_what) {
 			}
 
 			sticky_stack_end = 0;
-			if (root) {
+			if (root && !drop_mode_flags) {
 				sticky_list.clear();
 				Vector2 stick_ofs;
 				Vector2 last_ofs = stick_ofs;
@@ -7726,9 +7728,7 @@ Tree::Tree() {
 }
 
 Tree::~Tree() {
-	if (root) {
-		memdelete(root);
-	}
+	memdelete(root);
 	RenderingServer::get_singleton()->free_rid(drop_indicator_ci);
 	RenderingServer::get_singleton()->free_rid(content_ci);
 	RenderingServer::get_singleton()->free_rid(custom_ci);

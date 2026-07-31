@@ -166,7 +166,9 @@ bool GDScriptLanguage::validate(const String &p_script, const String &p_path, Li
 			const GDScriptWarning &warn = E;
 			ScriptLanguage::Warning w;
 			w.start_line = warn.start_line;
+			w.start_column = warn.start_column;
 			w.end_line = warn.end_line;
+			w.end_column = warn.end_column;
 			w.code = (int)warn.code;
 			w.string_code = GDScriptWarning::get_name_from_code(warn.code);
 			w.message = warn.get_message();
@@ -179,8 +181,10 @@ bool GDScriptLanguage::validate(const String &p_script, const String &p_path, Li
 			for (const GDScriptParser::ParserError &pe : parser.get_errors()) {
 				ScriptLanguage::ScriptError e;
 				e.path = p_path;
-				e.line = pe.start_line;
-				e.column = pe.start_column;
+				e.start_line = pe.start_line;
+				e.start_column = pe.start_column;
+				e.end_line = pe.end_line;
+				e.end_column = pe.end_column;
 				e.message = pe.message;
 				r_errors->push_back(e);
 			}
@@ -190,8 +194,10 @@ bool GDScriptLanguage::validate(const String &p_script, const String &p_path, Li
 				for (const GDScriptParser::ParserError &pe : depended_parser->get_errors()) {
 					ScriptLanguage::ScriptError e;
 					e.path = E.key;
-					e.line = pe.start_line;
-					e.column = pe.start_column;
+					e.start_line = pe.start_line;
+					e.start_column = pe.start_column;
+					e.end_line = pe.end_line;
+					e.end_column = pe.end_column;
 					e.message = pe.message;
 					r_errors->push_back(e);
 				}
@@ -231,7 +237,8 @@ bool GDScriptLanguage::supports_documentation() const {
 	return true;
 }
 
-int GDScriptLanguage::find_function(const String &p_function, const String &p_code) const {
+#ifdef TOOLS_ENABLED
+int32_t GDScriptEditorLanguage::find_function(const String &p_function, const String &p_code) const {
 	GDScriptTokenizerText tokenizer;
 	tokenizer.set_source_code(p_code);
 	int indent = 0;
@@ -255,6 +262,7 @@ int GDScriptLanguage::find_function(const String &p_function, const String &p_co
 	}
 	return -1;
 }
+#endif // TOOLS_ENABLED
 
 /* DEBUGGER FUNCTIONS */
 
@@ -961,7 +969,6 @@ static ScriptLanguage::CodeCompletionOption _calculate_string_insertion(const GD
 }
 
 static void _get_directory_contents(const GDScriptParser::Node *p_current, EditorFileSystemDirectory *p_dir, HashMap<String, ScriptLanguage::CodeCompletionOption> &r_list, const StringName &p_required_type = StringName()) {
-	const String quote_style = EDITOR_GET("text_editor/completion/use_single_quotes") ? "'" : "\"";
 	const bool requires_type = !p_required_type.is_empty();
 
 	for (int i = 0; i < p_dir->get_file_count(); i++) {
@@ -3007,8 +3014,6 @@ static void _list_call_arguments(GDScriptParser::CompletionContext &p_context, c
 	Variant base = p_base.value;
 	GDScriptParser::DataType base_type = p_base.type;
 	const StringName &method = p_call->function_name;
-
-	const String quote_style = EDITOR_GET("text_editor/completion/use_single_quotes") ? "'" : "\"";
 
 	const GDScriptParser::Node *existing_argument = p_call->arguments.size() > p_argidx ? p_call->arguments[p_argidx] : nullptr;
 
