@@ -48,7 +48,6 @@
 #include "core/version.h"
 #include "editor/doc/doc_data_compressed.gen.h"
 #include "editor/docks/filesystem_dock.h"
-#include "editor/editor_main_screen.h"
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
 #include "editor/file_system/editor_file_system.h"
@@ -60,6 +59,7 @@
 #include "editor/script/syntax_highlighters.h"
 #include "editor/settings/editor_settings.h"
 #include "editor/themes/editor_scale.h"
+#include "editor/themes/editor_theme_manager.h"
 #include "scene/gui/line_edit.h"
 #include "servers/display/display_server.h"
 
@@ -2354,7 +2354,7 @@ void EditorHelp::_update_doc() {
 void EditorHelp::_request_help(const String &p_string) {
 	Error err = _goto_desc(p_string, false);
 	if (err == OK) {
-		EditorNode::get_singleton()->get_editor_main_screen()->select(EditorMainScreen::EDITOR_SCRIPT);
+		ScriptEditor::get_singleton()->focus_editor();
 	}
 }
 
@@ -2496,6 +2496,15 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt, const C
 	const Color code_color = p_owner_node->get_theme_color(SNAME("code_color"), SNAME("EditorHelp"));
 	const Color kbd_color = p_owner_node->get_theme_color(SNAME("kbd_color"), SNAME("EditorHelp"));
 	const Color code_dark_color = Color(code_color, 0.8);
+	const Color note_color = p_owner_node->get_theme_color(SNAME("note_color"), SNAME("EditorHelp"));
+	const Color warning_color = p_owner_node->get_theme_color(SNAME("warning_color"), SNAME("EditorHelp"));
+	const Color important_color = p_owner_node->get_theme_color(SNAME("important_color"), SNAME("EditorHelp"));
+	const Color tip_color = p_owner_node->get_theme_color(SNAME("tip_color"), SNAME("EditorHelp"));
+
+	const Ref<Texture2D> note_icon = p_owner_node->get_editor_theme_icon(SNAME("NodeInfo"));
+	const Ref<Texture2D> warning_icon = p_owner_node->get_editor_theme_icon(SNAME("NodeWarning"));
+	const Ref<Texture2D> important_icon = p_owner_node->get_editor_theme_icon(SNAME("StatusWarning"));
+	const Ref<Texture2D> tip_icon = p_owner_node->get_editor_theme_icon(SNAME("StatusSuccess"));
 
 	const Color link_color = p_owner_node->get_theme_color(SNAME("link_color"), SNAME("EditorHelp"));
 	const Color link_method_color = p_owner_node->get_theme_color(SNAME("accent_color"), EditorStringName(Editor));
@@ -2837,6 +2846,36 @@ static void _add_text_to_rt(const String &p_bbcode, RichTextLabel *p_rt, const C
 					p_rt->add_newline();
 				}
 			}
+		} else if (tag == "note" || tag == "warning" || tag == "important" || tag == "tip") {
+			// Admonition block
+			const Color &admonition_color = tag == "warning" ? warning_color : (tag == "important" ? important_color : (tag == "tip" ? tip_color : note_color));
+			p_rt->push_color(admonition_color);
+			p_rt->push_font(doc_bold_font);
+
+			if (tag == "note") {
+				// Note block.
+				p_rt->add_image(note_icon, note_icon->get_width(), note_icon->get_height(), note_color * (EditorThemeManager::is_dark_theme() ? Color(1, 1, 1) : Color(3.92, 3.92, 3.92)));
+				p_rt->add_text(nbsp + TTR("Note:") + " ");
+			} else if (tag == "warning") {
+				// Warning block.
+				// The source icon is already colored, so don't tint it further.
+				p_rt->add_image(warning_icon, warning_icon->get_width(), warning_icon->get_height());
+				p_rt->add_text(nbsp + TTR("Warning:") + " ");
+			} else if (tag == "important") {
+				// Important block.
+				// The source icon is already colored, adjust it to match text color.
+				p_rt->add_image(important_icon, important_icon->get_width(), important_icon->get_height(), important_color / warning_color);
+				p_rt->add_text(nbsp + TTR("Important:") + " ");
+			} else if (tag == "tip") {
+				// Tip block.
+				// The source icon is already colored, adjust it to match text color.
+				p_rt->add_image(tip_icon, tip_icon->get_width(), tip_icon->get_height(), Color(2.68, 1, 1.69) * tip_color);
+				p_rt->add_text(nbsp + TTR("Tip:") + " ");
+			}
+
+			p_rt->pop(); // font
+			pos = brk_end + 1;
+			tag_stack.push_front(tag);
 		} else if (tag == "kbd") {
 			int end_pos = bbcode.find("[/kbd]", brk_end + 1);
 			if (end_pos < 0) {
@@ -4320,7 +4359,7 @@ void EditorHelpBit::_go_to_url(const String &p_what) {
 
 void EditorHelpBit::_go_to_help(const String &p_what) {
 	if (ScriptEditor::get_singleton()) {
-		EditorNode::get_singleton()->get_editor_main_screen()->select(EditorMainScreen::EDITOR_SCRIPT);
+		ScriptEditor::get_singleton()->focus_editor();
 		ScriptEditor::get_singleton()->goto_help(p_what);
 	} else {
 		_go_to_url(p_what);
@@ -5041,7 +5080,8 @@ Control *EditorHelpBitTooltip::make_tooltip(
 		const String &p_symbol,
 		const String &p_prologue,
 		bool p_use_class_prefix,
-		bool p_shortcut) {
+		bool p_shortcut,
+		const String &p_diagnostics) {
 	ERR_FAIL_NULL_V(p_target, _make_invisible_control());
 
 	// Show the custom tooltip only if it is not already visible.
@@ -5051,14 +5091,26 @@ Control *EditorHelpBitTooltip::make_tooltip(
 		return _make_invisible_control();
 	}
 
-	EditorHelpBit *help_bit = memnew(EditorHelpBit(p_symbol, p_prologue, p_use_class_prefix, false, true));
-
 	EditorHelpBitTooltip *tooltip = memnew(EditorHelpBitTooltip(p_target, p_shortcut));
-	help_bit->connect("request_hide", callable_mp(static_cast<Node *>(tooltip), &Node::queue_free));
-	tooltip->add_child(help_bit);
+
+	bool has_diagnostics = !p_diagnostics.is_empty();
+	bool has_doc_tooltip = !p_symbol.is_empty() || !p_prologue.is_empty();
+
+	if (has_diagnostics) {
+		tooltip->diagnostics_label->set_text(p_diagnostics);
+	} else {
+		tooltip->diagnostics_label->hide();
+	}
+
+	if (has_doc_tooltip) {
+		EditorHelpBit *help_bit = memnew(EditorHelpBit(p_symbol, p_prologue, p_use_class_prefix, false, true));
+		help_bit->connect("request_hide", callable_mp(static_cast<Node *>(tooltip), &Node::queue_free));
+		tooltip->vbox->add_child(help_bit);
+		help_bit->update_content_height();
+	}
+
 	p_target->add_child(tooltip);
 
-	help_bit->update_content_height();
 	if (tooltip->is_shortcut_pressed()) {
 		tooltip->_shortcut_pressed(p_target);
 	} else {
@@ -5119,6 +5171,19 @@ EditorHelpBitTooltip::EditorHelpBitTooltip(Control *p_target, bool p_shortcut) {
 	_is_shortcut_pressed = p_shortcut;
 
 	set_theme_type_variation("TooltipPanel");
+
+	diagnostics_label = memnew(RichTextLabel);
+	diagnostics_label->set_theme_type_variation("EditorHelpBitTooltipTitle");
+	diagnostics_label->set_custom_minimum_size(Size2(640 * EDSCALE, 0)); // GH-93031. Set the minimum width even if `fit_content` is true.
+	diagnostics_label->set_fit_content(true);
+	diagnostics_label->set_selection_enabled(true);
+	diagnostics_label->set_context_menu_enabled(false);
+	diagnostics_label->set_use_bbcode(true);
+
+	vbox = memnew(VBoxContainer);
+	vbox->add_child(diagnostics_label);
+
+	add_child(vbox);
 
 	timer = memnew(Timer);
 	timer->set_wait_time(0.25);

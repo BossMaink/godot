@@ -586,6 +586,7 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_KHR_RAY_QUERY_EXTENSION_NAME, false);
 
 	// We don't actually use this extension, but some runtime components on some platforms
 	// can and will fill the validation layers with useless info otherwise if not enabled.
@@ -919,6 +920,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_pipeline_features = {};
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
 		VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
+		VkPhysicalDeviceRayQueryFeaturesKHR ray_query_features = {};
 
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
@@ -1009,6 +1011,12 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			next_features = &sync_2_features;
 		}
 
+		if (enabled_device_extension_names.has(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
+			ray_query_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+			ray_query_features.pNext = next_features;
+			next_features = &ray_query_features;
+		}
+
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
 		device_features_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		device_features_2.pNext = next_features;
@@ -1096,6 +1104,10 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		if (enabled_device_extension_names.has(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
 			raytracing_capabilities.raytracing_pipeline_support = raytracing_pipeline_features.rayTracingPipeline;
 			raytracing_capabilities.validation = raytracing_validation_features.rayTracingValidation;
+		}
+
+		if (enabled_device_extension_names.has(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
+			ray_query_support = ray_query_features.rayQuery;
 		}
 	}
 
@@ -1444,6 +1456,14 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		create_info_next = &raytracing_validation_features;
 	}
 
+	VkPhysicalDeviceRayQueryFeaturesKHR ray_query_features = {};
+	if (ray_query_support) {
+		ray_query_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+		ray_query_features.pNext = create_info_next;
+		ray_query_features.rayQuery = ray_query_support;
+		create_info_next = &ray_query_features;
+	}
+
 	VkPhysicalDeviceVulkan11Features vulkan_1_1_features = {};
 	VkPhysicalDevice16BitStorageFeaturesKHR storage_features = {};
 	VkPhysicalDeviceMultiviewFeatures multiview_features = {};
@@ -1567,6 +1587,24 @@ Error RenderingDeviceDriverVulkan::_initialize_allocator() {
 	}
 	VkResult err = vmaCreateAllocator(&allocator_info, &allocator);
 	ERR_FAIL_COND_V_MSG(err, ERR_CANT_CREATE, vformat("Couldn't create Vulkan memory allocator (VkResult error %d).", err));
+
+	// Check for device local, host visible and host coherent memory support.
+	const VkPhysicalDeviceMemoryProperties *memory_properties = nullptr;
+	vmaGetMemoryProperties(allocator, &memory_properties);
+
+	const VkMemoryPropertyFlags device_local_host_visible_host_coherent_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+	for (uint32_t i = 0; i < memory_properties->memoryTypeCount; i++) {
+		const VkMemoryType &memory_type = memory_properties->memoryTypes[i];
+
+		if ((memory_type.propertyFlags & device_local_host_visible_host_coherent_flags) == device_local_host_visible_host_coherent_flags) {
+			// Above 256 MiB is a good indicator for ReBAR or cache-coherent UMA support.
+			if (memory_properties->memoryHeaps[memory_type.heapIndex].size > (256 * 1024 * 1024)) {
+				device_local_host_visible_host_coherent_memory_support = true;
+				break;
+			}
+		}
+	}
 
 	return OK;
 }
@@ -2007,6 +2045,15 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 				uint32_t mem_type_index = 0;
 				vmaFindMemoryTypeIndexForBufferInfo(allocator, &create_info, &alloc_create_info, &mem_type_index);
 				alloc_create_info.pool = _find_or_create_small_allocs_pool(mem_type_index);
+			}
+		} break;
+		case MEMORY_ALLOCATION_TYPE_GPU_MAPPABLE: {
+			if (device_local_host_visible_host_coherent_memory_support) {
+				vma_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+				alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+				alloc_create_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			} else {
+				ERR_FAIL_V_MSG(BufferID(), "GPU mappable buffers are unsupported on this device.");
 			}
 		} break;
 	}
@@ -6396,19 +6443,24 @@ RDD::AccelerationStructureID RenderingDeviceDriverVulkan::tlas_create(uint32_t p
 
 void RenderingDeviceDriverVulkan::acceleration_structure_instance_write(uint8_t *r_driver_instance, const AccelerationStructureInstance &p_instance) {
 #if VULKAN_RAYTRACING_ENABLED
-	VkAccelerationStructureInstanceKHR *vk_instance = (VkAccelerationStructureInstanceKHR *)r_driver_instance;
-	_store_transform_transposed_3x4(p_instance.transform, vk_instance->transform);
-	vk_instance->instanceCustomIndex = p_instance.id;
-	vk_instance->mask = p_instance.mask;
-	vk_instance->instanceShaderBindingTableRecordOffset = p_instance.hit_sbt_offset;
-	vk_instance->flags = p_instance.flags;
+	VkAccelerationStructureInstanceKHR vk_instance = {};
+	_store_transform_transposed_3x4(p_instance.transform, vk_instance.transform);
+	vk_instance.instanceCustomIndex = p_instance.id;
+	vk_instance.mask = p_instance.mask;
+	vk_instance.instanceShaderBindingTableRecordOffset = p_instance.hit_sbt_offset;
+	vk_instance.flags = p_instance.flags;
 
 	if (p_instance.blas) {
 		const AccelerationStructureInfo *blas_info = (const AccelerationStructureInfo *)p_instance.blas.id;
-		vk_instance->accelerationStructureReference = buffer_get_device_address(blas_info->buffer);
+		vk_instance.accelerationStructureReference = buffer_get_device_address(blas_info->buffer);
 	} else {
-		vk_instance->accelerationStructureReference = 0;
+		vk_instance.accelerationStructureReference = 0;
 	}
+
+	// Due to VkAccelerationStructureInstanceKHR containing bit fields, the compiler may generate
+	// reads from a potentially write-combined memory pointer, which is prohibitively slow.
+	// To solve this, we fill the instance data on the stack, and copy it all at once.
+	memcpy(r_driver_instance, &vk_instance, sizeof(VkAccelerationStructureInstanceKHR));
 #endif
 }
 
@@ -7423,6 +7475,8 @@ bool RenderingDeviceDriverVulkan::has_feature(Features p_feature) {
 #else
 			return context_driver->is_colorspace_supported();
 #endif // defined(WINDOWS_ENABLED)
+		case SUPPORTS_GPU_MAPPABLE_BUFFER:
+			return device_local_host_visible_host_coherent_memory_support;
 		default:
 			return false;
 	}
