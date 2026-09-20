@@ -782,7 +782,11 @@ void ThemeModern::populate_standard_styles(const Ref<EditorTheme> &p_theme, Edit
 			p_theme->set_color("scroll_hint_color", "ItemList", Color(0, 0, 0, p_config.dark_theme ? 1.0 : 0.5));
 			p_theme->set_constant("v_separation", "ItemList", EDSCALE_RND(p_config.base_margin * 1.5));
 			p_theme->set_constant("h_separation", "ItemList", EDSCALE_RND(p_config.increased_margin + 2));
-			p_theme->set_constant("scroll_bar_h_separation", "ItemList", style_itemlist_bg->get_margin(SIDE_RIGHT));
+			p_theme->set_constant("scrollbar_margin_left", "ItemList", 0);
+			p_theme->set_constant("scrollbar_margin_top", "ItemList", 0);
+			p_theme->set_constant("scrollbar_margin_right", "ItemList", 0);
+			p_theme->set_constant("scrollbar_margin_bottom", "ItemList", 0);
+			p_theme->set_constant("scrollbar_h_separation", "ItemList", EDSCALE_RND(1));
 			p_theme->set_constant("icon_margin", "ItemList", EDSCALE_RND(p_config.increased_margin + 2));
 			p_theme->set_constant(SceneStringName(line_separation), "ItemList", p_config.separation_margin);
 			p_theme->set_constant("outline_size", "ItemList", 0);
@@ -1684,6 +1688,11 @@ void ThemeModern::populate_editor_styles(const Ref<EditorTheme> &p_theme, Editor
 		p_theme->set_stylebox(SceneStringName(panel), "ScrollContainer", p_config.base_empty_style);
 		p_theme->set_stylebox("focus", "ScrollContainer", p_config.focus_style);
 
+		p_theme->set_constant("scrollbar_margin_left", "ScrollContainer", 0);
+		p_theme->set_constant("scrollbar_margin_top", "ScrollContainer", 0);
+		p_theme->set_constant("scrollbar_margin_right", "ScrollContainer", 0);
+		p_theme->set_constant("scrollbar_margin_bottom", "ScrollContainer", 0);
+
 		// Scroll hints.
 		p_theme->set_color("scroll_hint_vertical_color", "ScrollContainer", Color(0, 0, 0, p_config.dark_theme ? 1.0 : 0.5));
 		p_theme->set_color("scroll_hint_horizontal_color", "ScrollContainer", Color(0, 0, 0, p_config.dark_theme ? 1.0 : 0.5));
@@ -1790,6 +1799,7 @@ void ThemeModern::populate_editor_styles(const Ref<EditorTheme> &p_theme, Editor
 		// Bottom panel.
 		Ref<StyleBoxFlat> style_bottom_panel = p_config.content_panel_style->duplicate();
 		style_bottom_panel->set_content_margin_all(p_config.tab_container_style->get_content_margin(SIDE_LEFT));
+		style_bottom_panel->set_content_margin(SIDE_BOTTOM, p_config.content_panel_style->get_content_margin(SIDE_BOTTOM));
 		style_bottom_panel->set_border_width(SIDE_BOTTOM, 0);
 		style_bottom_panel->set_corner_radius_all(EDSCALE_RND(p_config.corner_radius));
 		style_bottom_panel->set_corner_radius(CORNER_BOTTOM_LEFT, 0);

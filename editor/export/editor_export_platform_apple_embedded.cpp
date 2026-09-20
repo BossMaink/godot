@@ -1738,7 +1738,7 @@ Error EditorExportPlatformAppleEmbedded::_export_project_helper(const Ref<Editor
 
 	bool export_project_only = p_preset->get("application/export_project_only");
 	if (p_oneclick) {
-		export_project_only = false; // Skip for one-click deploy.
+		export_project_only = false; // Skip for remote deploy.
 	}
 
 	EditorProgress ep("export", export_project_only ? TTR("Exporting for " + get_name() + " (Project Files Only)") : TTR("Exporting for " + get_name() + ""), export_project_only ? 2 : 5, true);
@@ -3098,10 +3098,10 @@ void EditorExportPlatformAppleEmbedded::_initialize(const char *p_platform_logo_
 	Ref<Image> img = memnew(Image);
 	const bool upsample = !Math::is_equal_approx(Math::round(EDSCALE), EDSCALE);
 
-	ImageLoaderSVG::create_image_from_string(img, p_platform_logo_svg, EDSCALE, upsample, false);
+	ImageLoaderSVG::create_image_from_string(img, p_platform_logo_svg, EDSCALE, upsample, HashMap<Color, Color>());
 	logo = ImageTexture::create_from_image(img);
 
-	ImageLoaderSVG::create_image_from_string(img, p_run_icon_svg, EDSCALE, upsample, false);
+	ImageLoaderSVG::create_image_from_string(img, p_run_icon_svg, EDSCALE, upsample, HashMap<Color, Color>());
 	run_icon = ImageTexture::create_from_image(img);
 
 	plugins_changed.set();
