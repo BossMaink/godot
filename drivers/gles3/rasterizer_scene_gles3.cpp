@@ -2798,6 +2798,7 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 		scene_state.enable_gl_blend(false);
 	}
 	scene_state.current_blend_mode = GLES3::SceneShaderData::BLEND_MODE_MIX;
+	scene_state.current_blend_preserve_alpha = false;
 
 	scene_state.enable_gl_scissor_test(false);
 	scene_state.enable_gl_depth_test(true);
@@ -3446,7 +3447,8 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 					desired_blend_mode = shader->blend_mode;
 				}
 
-				if (desired_blend_mode != scene_state.current_blend_mode) {
+				const bool preserve_alpha = p_pass_mode == PASS_MODE_COLOR_TRANSPARENT && pass > 0 && p_render_data->transparent_bg;
+				if (desired_blend_mode != scene_state.current_blend_mode || preserve_alpha != scene_state.current_blend_preserve_alpha) {
 					switch (desired_blend_mode) {
 						case GLES3::SceneShaderData::BLEND_MODE_MIX: {
 							glBlendEquation(GL_FUNC_ADD);
@@ -3459,7 +3461,12 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 						} break;
 						case GLES3::SceneShaderData::BLEND_MODE_ADD: {
 							glBlendEquation(GL_FUNC_ADD);
-							glBlendFunc(p_pass_mode == PASS_MODE_COLOR_TRANSPARENT ? GL_SRC_ALPHA : GL_ONE, GL_ONE);
+							if (preserve_alpha) {
+								// Additional lights change radiance, not the surface coverage written by the base pass.
+								glBlendFuncSeparate(p_pass_mode == PASS_MODE_COLOR_TRANSPARENT ? GL_SRC_ALPHA : GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+							} else {
+								glBlendFunc(p_pass_mode == PASS_MODE_COLOR_TRANSPARENT ? GL_SRC_ALPHA : GL_ONE, GL_ONE);
+							}
 
 						} break;
 						case GLES3::SceneShaderData::BLEND_MODE_SUB: {
@@ -3486,6 +3493,7 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 						} break;
 					}
 					scene_state.current_blend_mode = desired_blend_mode;
+					scene_state.current_blend_preserve_alpha = preserve_alpha;
 				}
 			}
 

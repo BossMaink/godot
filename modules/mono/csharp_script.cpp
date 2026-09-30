@@ -1779,7 +1779,11 @@ void CSharpInstance::mono_object_disposed(GCHandleIntPtr p_gchandle_to_free) {
 void CSharpInstance::mono_object_disposed_baseref(GCHandleIntPtr p_gchandle_to_free, bool p_is_finalizer, bool &r_delete_owner, bool &r_remove_script_instance) {
 #ifdef DEBUG_ENABLED
 	CRASH_COND(!base_ref_counted);
-	CRASH_COND(gchandle.is_released());
+	// A native reference can arrive after the weak target was collected but
+	// before its finalizer releases the unsafe owner reference. The failed
+	// weak-to-strong swap has already freed that handle; the finalizer must
+	// still drop its owner reference and recreate the managed instance if kept.
+	CRASH_COND(gchandle.is_released() && !p_is_finalizer);
 #endif // DEBUG_ENABLED
 
 	// Must make sure event signals are not left dangling
@@ -1846,7 +1850,7 @@ void CSharpInstance::refcount_incremented() {
 
 	RefCounted *rc_owner = Object::cast_to<RefCounted>(owner);
 
-	if (rc_owner->get_reference_count() > 1 && gchandle.is_weak()) { // The managed side also holds a reference, hence 1 instead of 0
+	if (rc_owner->get_reference_count() > 1 && !gchandle.is_released() && gchandle.is_weak()) { // The managed side also holds a reference, hence 1 instead of 0
 		// The reference count was increased after the managed side was the only one referencing our owner.
 		// This means the owner is being referenced again by the unmanaged side,
 		// so the owner must hold the managed side alive again to avoid it from being GCed.
@@ -1879,7 +1883,7 @@ bool CSharpInstance::refcount_decremented() {
 
 	int refcount = rc_owner->get_reference_count();
 
-	if (refcount == 1 && !gchandle.is_weak()) { // The managed side also holds a reference, hence 1 instead of 0
+	if (refcount == 1 && !gchandle.is_released() && !gchandle.is_weak()) { // The managed side also holds a reference, hence 1 instead of 0
 		// If owner owner is no longer referenced by the unmanaged side,
 		// the managed instance takes responsibility of deleting the owner when GCed.
 

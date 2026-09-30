@@ -43,17 +43,29 @@ namespace Godot
             // like StringName, NodePath, Godot.Collections.Array/Dictionary, etc.
             // The Godot Object Dispose() method may need any of the later instances.
 
-            foreach (WeakReference<GodotObject> item in GodotObjectInstances.Keys)
+            // Short weak references cannot expose targets already queued for
+            // finalization. Finish those destructors while native C# bindings
+            // still exist, then explicitly dispose surviving wrappers. Disposal
+            // can make more wrappers unreachable, so drain to an empty registry.
+            do
             {
-                if (item.TryGetTarget(out GodotObject? self))
-                    self.Dispose();
-            }
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                foreach (WeakReference<GodotObject> item in GodotObjectInstances.Keys)
+                {
+                    if (item.TryGetTarget(out GodotObject? self))
+                        self.Dispose();
+                }
+    
+                foreach (WeakReference<IDisposable> item in OtherInstances.Keys)
+                {
+                    if (item.TryGetTarget(out IDisposable? self))
+                        self.Dispose();
+                }
+    
 
-            foreach (WeakReference<IDisposable> item in OtherInstances.Keys)
-            {
-                if (item.TryGetTarget(out IDisposable? self))
-                    self.Dispose();
-            }
+            } while (!GodotObjectInstances.IsEmpty || !OtherInstances.IsEmpty);
+            GC.WaitForPendingFinalizers();
 
             if (isStdoutVerbose)
                 GD.Print("Unloading: Finished disposing tracked instances.");

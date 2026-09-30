@@ -496,6 +496,7 @@ private:
 		bool used_depth_prepass = false;
 
 		GLES3::SceneShaderData::BlendMode current_blend_mode = GLES3::SceneShaderData::BLEND_MODE_MIX;
+		bool current_blend_preserve_alpha = false;
 		RSE::CullMode cull_mode = RSE::CULL_MODE_BACK;
 		GLenum current_depth_function = GL_GEQUAL;
 
