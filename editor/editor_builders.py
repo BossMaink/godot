@@ -111,12 +111,17 @@ def make_translations(target, source, env):
             decomp_size = len(buffer)
             buffer = methods.compress_buffer(buffer)
 
-            file.write(f"""\
-inline constexpr const unsigned char _{category}_translation_{name}_compressed[] = {{
+            # Keep each language in its own translation unit. A single generated
+            # array file can exhaust compiler memory when documentation grows.
+            source_name = os.path.splitext(os.path.basename(path))[0]
+            data_cpp = os.path.join(os.path.dirname(target_cpp), f"{category}_translations_{source_name}.gen.cpp")
+            with methods.generated_wrapper(data_cpp) as data_file:
+                data_file.write(f"""\
+extern const unsigned char _{category}_translation_{name}_compressed[] = {{
 {methods.format_buffer(buffer, 1)}
 }};
-
 """)
+            file.write(f"extern const unsigned char _{category}_translation_{name}_compressed[];\n")
 
             xl_names.append([name, len(buffer), decomp_size])
 

@@ -62,13 +62,24 @@ if env.editor_build:
         "#editor/translations/doc_translations.gen.cpp": Glob("#doc/translations/*"),
         "#editor/translations/extractable_translations.gen.cpp": Glob("#editor/translations/extractable/*"),
     }
+    generated_translation_data = []
     for target_cpp, sources in translation_targets.items():
         target_h = os.path.splitext(target_cpp)[0] + ".h"
+        category = os.path.basename(target_cpp).split("_")[0]
+        data_targets = [
+            os.path.join(
+                os.path.dirname(target_cpp),
+                f"{category}_translations_{os.path.splitext(os.path.basename(str(source)))[0]}.gen.cpp",
+            )
+            for source in sources
+        ]
         env.CommandNoCache(
-            [target_h, target_cpp],
+            [target_h, target_cpp, *data_targets],
             sources,
             env.Run(editor_builders.make_translations),
         )
+        generated_translation_data.extend(data_targets)
+    env.add_source_files(env.editor_sources, generated_translation_data)
 
     env.add_source_files(env.editor_sources, "*.cpp")
     env.add_source_files(env.editor_sources, gen_exporters)
