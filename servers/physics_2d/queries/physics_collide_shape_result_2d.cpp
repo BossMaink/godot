@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  jolt_custom_user_data_shape.h                                         */
+/*  physics_collide_shape_result_2d.cpp                                   */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,31 +28,45 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#include "physics_collide_shape_result_2d.h"
 
-#include "jolt_custom_decorated_shape.h"
-#include "jolt_custom_shape_type.h"
+#include "core/object/class_db.h"
 
-class JoltCustomUserDataShapeSettings final : public JoltCustomDecoratedShapeSettings {
-public:
-	using JoltCustomDecoratedShapeSettings::JoltCustomDecoratedShapeSettings;
+PhysicsCollideShapeResult2D::PhysicsCollideShapeResult2D(int p_max_collisions) {
+	ERR_FAIL_COND(p_max_collisions < 0);
+	result.resize(2 * p_max_collisions);
+}
 
-	virtual ShapeResult Create() const override;
-};
+int PhysicsCollideShapeResult2D::get_max_collisions() const {
+	return result.size() / 2;
+}
 
-class JoltCustomUserDataShape final : public JoltCustomDecoratedShape {
-public:
-	static void register_type();
+void PhysicsCollideShapeResult2D::set_max_collisions(int p_max_collisions) {
+	ERR_FAIL_COND(p_max_collisions < 0);
+	result.resize(2 * p_max_collisions);
+	collision_count = MIN(collision_count, static_cast<int>(result.size() / 2));
+}
 
-	JoltCustomUserDataShape() :
-			JoltCustomDecoratedShape(JoltCustomShapeSubType::OVERRIDE_USER_DATA) {}
+int PhysicsCollideShapeResult2D::get_collision_count() const {
+	return collision_count;
+}
 
-	JoltCustomUserDataShape(const JoltCustomUserDataShapeSettings &p_settings, ShapeResult &p_result) :
-			JoltCustomDecoratedShape(JoltCustomShapeSubType::OVERRIDE_USER_DATA, p_settings, p_result) {
-		if (!p_result.HasError()) {
-			p_result.Set(this);
-		}
-	}
+Vector2 PhysicsCollideShapeResult2D::get_point_on_queried_shape(int p_collision_index) const {
+	ERR_FAIL_INDEX_V(p_collision_index, collision_count, Vector2());
+	return result[2 * p_collision_index];
+}
 
-	virtual JPH::uint64 GetSubShapeUserData(const JPH::SubShapeID &p_sub_shape_id) const override { return GetUserData(); }
-};
+Vector2 PhysicsCollideShapeResult2D::get_point_on_colliding_shape(int p_collision_index) const {
+	ERR_FAIL_INDEX_V(p_collision_index, collision_count, Vector2());
+	return result[2 * p_collision_index + 1];
+}
+
+void PhysicsCollideShapeResult2D::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("get_max_collisions"), &PhysicsCollideShapeResult2D::get_max_collisions);
+	ClassDB::bind_method(D_METHOD("set_max_collisions", "max_collisions"), &PhysicsCollideShapeResult2D::set_max_collisions);
+	ClassDB::bind_method(D_METHOD("get_collision_count"), &PhysicsCollideShapeResult2D::get_collision_count);
+	ClassDB::bind_method(D_METHOD("get_point_on_queried_shape", "collision_index"), &PhysicsCollideShapeResult2D::get_point_on_queried_shape);
+	ClassDB::bind_method(D_METHOD("get_point_on_colliding_shape", "collision_index"), &PhysicsCollideShapeResult2D::get_point_on_colliding_shape);
+
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_collisions"), "set_max_collisions", "get_max_collisions");
+}

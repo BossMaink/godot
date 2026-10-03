@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  jolt_custom_double_sided_shape.h                                      */
+/*  physics_intersect_shape_result_3d.h                                   */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,44 +30,30 @@
 
 #pragma once
 
-#include "jolt_custom_decorated_shape.h"
-#include "jolt_custom_shape_type.h"
+#include "core/object/ref_counted.h"
+#include "servers/physics_3d/physics_server_3d_types.h"
 
-class JoltCustomDoubleSidedShapeSettings final : public JoltCustomDecoratedShapeSettings {
-public:
-	bool back_face_collision = false;
+class PhysicsIntersectShapeResult3D : public RefCounted {
+	GDCLASS(PhysicsIntersectShapeResult3D, RefCounted);
 
-	JoltCustomDoubleSidedShapeSettings() = default;
+	friend class PhysicsDirectSpaceState3D;
 
-	JoltCustomDoubleSidedShapeSettings(const ShapeSettings *p_inner_settings, bool p_back_face_collision) :
-			JoltCustomDecoratedShapeSettings(p_inner_settings), back_face_collision(p_back_face_collision) {}
+	LocalVector<PS3DT::ShapeResult> result;
+	int intersection_count = 0;
 
-	JoltCustomDoubleSidedShapeSettings(const JPH::Shape *p_inner_shape, bool p_back_face_collision) :
-			JoltCustomDecoratedShapeSettings(p_inner_shape), back_face_collision(p_back_face_collision) {}
-
-	virtual JPH::Shape::ShapeResult Create() const override;
-};
-
-class JoltCustomDoubleSidedShape final : public JoltCustomDecoratedShape {
-	bool back_face_collision = false;
+protected:
+	static void _bind_methods();
 
 public:
-	static void register_type();
+	PhysicsIntersectShapeResult3D(int p_max_intersections = 32);
 
-	JoltCustomDoubleSidedShape() :
-			JoltCustomDecoratedShape(JoltCustomShapeSubType::DOUBLE_SIDED) {}
+	int get_max_intersections() const;
+	void set_max_intersections(int p_max_intersections);
 
-	JoltCustomDoubleSidedShape(const JoltCustomDoubleSidedShapeSettings &p_settings, JPH::Shape::ShapeResult &p_result) :
-			JoltCustomDecoratedShape(JoltCustomShapeSubType::DOUBLE_SIDED, p_settings, p_result), back_face_collision(p_settings.back_face_collision) {
-		if (!p_result.HasError()) {
-			p_result.Set(this);
-		}
-	}
+	int get_intersection_count() const;
 
-	JoltCustomDoubleSidedShape(const JPH::Shape *p_inner_shape, bool p_back_face_collision) :
-			JoltCustomDecoratedShape(JoltCustomShapeSubType::DOUBLE_SIDED, p_inner_shape), back_face_collision(p_back_face_collision) {}
-
-	virtual void CastRay(const JPH::RayCast &p_ray, const JPH::RayCastSettings &p_ray_cast_settings, const JPH::SubShapeIDCreator &p_sub_shape_id_creator, JPH::CastRayCollector &p_collector, const JPH::ShapeFilter &p_shape_filter = JPH::ShapeFilter()) const override;
-
-	bool should_collide_with_back_faces() const { return back_face_collision; }
+	RID get_collider_rid(int p_intersection_index) const;
+	ObjectID get_collider_id(int p_intersection_index) const;
+	Object *get_collider(int p_intersection_index) const;
+	int get_collider_shape(int p_intersection_index) const;
 };

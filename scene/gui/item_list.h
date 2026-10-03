@@ -157,6 +157,8 @@ private:
 	void _mouse_exited();
 	void _shift_range_select(int p_from, int p_to);
 
+	int _get_available_item_width() const;
+
 	String _atr(int p_idx, const String &p_text) const;
 
 protected:
@@ -198,6 +200,11 @@ protected:
 
 		Ref<Texture2D> scroll_hint;
 		Color scroll_hint_color;
+
+		Ref<AudioStream> focus_sound;
+		Ref<AudioStream> item_hovered_sound;
+		Ref<AudioStream> item_selected_sound;
+		Ref<AudioStream> item_selected_disabled_sound;
 	} theme_cache;
 
 	void _notification(int p_what);
