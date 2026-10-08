@@ -3486,6 +3486,9 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 				const bool preserve_alpha = p_pass_mode == PASS_MODE_COLOR_TRANSPARENT && pass > 0 && p_render_data->transparent_bg;
 				if (desired_blend_mode != scene_state.current_blend_mode || preserve_alpha != scene_state.current_blend_preserve_alpha) {
 					switch (desired_blend_mode) {
+						// Compatibility has no native alpha-to-coverage path yet. Restore its
+						// mix fallback instead of inheriting an earlier additive light pass.
+						case GLES3::SceneShaderData::BLEND_MODE_ALPHA_TO_COVERAGE:
 						case GLES3::SceneShaderData::BLEND_MODE_MIX: {
 							glBlendEquation(GL_FUNC_ADD);
 							if (p_render_data->transparent_bg) {
@@ -3523,9 +3526,6 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 							glBlendEquation(GL_FUNC_ADD);
 							glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-						} break;
-						case GLES3::SceneShaderData::BLEND_MODE_ALPHA_TO_COVERAGE: {
-							// Do nothing for now.
 						} break;
 					}
 					scene_state.current_blend_mode = desired_blend_mode;
