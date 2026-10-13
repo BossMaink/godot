@@ -39,7 +39,7 @@
 class RenderingContextDriverVulkanWindows : public RenderingContextDriverVulkan {
 private:
 	const char *_get_platform_surface_extension() const override final;
-	HashMap<SurfaceID, HWND> experiment_windows;
+	HashMap<SurfaceID, HWND> bridge_windows;
 	HashMap<SurfaceID, HWND> original_windows;
 
 protected:

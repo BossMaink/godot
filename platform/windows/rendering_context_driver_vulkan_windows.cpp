@@ -58,28 +58,28 @@ RenderingContextDriver::SurfaceID RenderingContextDriverVulkanWindows::surface_c
 	create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 	create_info.hinstance = wpd->instance;
 	create_info.hwnd = wpd->window;
-	HWND experiment_surface_window = nullptr;
-	if (OS::get_singleton()->get_environment("GODOT_VULKAN_LAYERED_READBACK") == "1" || OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1") {
-		// Keep Vulkan WSI off the actual layered HWND. This hidden window is only
+	HWND bridge_surface_window = nullptr;
+	if (OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1") {
+		// Keep Vulkan WSI off the DirectComposition HWND. This hidden window is only
 		// an initialization/boot surface; viewport rendering remains on Vulkan.
-		experiment_surface_window = CreateWindowExW(0, L"STATIC", L"Godot Vulkan experiment WSI", WS_POPUP, 0, 0, 64, 64, nullptr, nullptr, wpd->instance, nullptr);
-		ERR_FAIL_NULL_V(experiment_surface_window, SurfaceID());
-		create_info.hwnd = experiment_surface_window;
+		bridge_surface_window = CreateWindowExW(0, L"STATIC", L"Godot Vulkan bridge WSI", WS_POPUP, 0, 0, 64, 64, nullptr, nullptr, wpd->instance, nullptr);
+		ERR_FAIL_NULL_V(bridge_surface_window, SurfaceID());
+		create_info.hwnd = bridge_surface_window;
 	}
 
 
 	VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 	VkResult err = vkCreateWin32SurfaceKHR(instance_get(), &create_info, get_allocation_callbacks(VK_OBJECT_TYPE_SURFACE_KHR), &vk_surface);
 	if (err != VK_SUCCESS) {
-		if (experiment_surface_window) { DestroyWindow(experiment_surface_window); }
+		if (bridge_surface_window) { DestroyWindow(bridge_surface_window); }
 		ERR_FAIL_V(SurfaceID());
 	}
 
 	Surface *surface = memnew(Surface);
 	surface->vk_surface = vk_surface;
 	original_windows[SurfaceID(surface)] = wpd->window;
-	if (experiment_surface_window) {
-		experiment_windows[SurfaceID(surface)] = experiment_surface_window;
+	if (bridge_surface_window) {
+		bridge_windows[SurfaceID(surface)] = bridge_surface_window;
 	}
 
 	return SurfaceID(surface);
@@ -87,13 +87,13 @@ RenderingContextDriver::SurfaceID RenderingContextDriverVulkanWindows::surface_c
 
 void RenderingContextDriverVulkanWindows::surface_destroy(SurfaceID p_surface) {
 	original_windows.erase(p_surface);
-	HWND experiment_window = nullptr;
-	if (experiment_windows.has(p_surface)) {
-		experiment_window = experiment_windows[p_surface];
-		experiment_windows.erase(p_surface);
+	HWND bridge_window = nullptr;
+	if (bridge_windows.has(p_surface)) {
+		bridge_window = bridge_windows[p_surface];
+		bridge_windows.erase(p_surface);
 	}
 	RenderingContextDriverVulkan::surface_destroy(p_surface);
-	if (experiment_window) { DestroyWindow(experiment_window); }
+	if (bridge_window) { DestroyWindow(bridge_window); }
 }
 
 #endif // WINDOWS_ENABLED && VULKAN_ENABLED

@@ -8051,10 +8051,6 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 	memset(&wc, 0, sizeof(WNDCLASSEXW));
 	wc.cbSize = sizeof(WNDCLASSEXW);
 	wc.style = CS_OWNDC | CS_DBLCLKS;
-	if (p_rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_LAYERED_READBACK") == "1") {
-		// WS_EX_LAYERED is incompatible with CS_OWNDC. Only this opt-in Vulkan experiment uses it.
-		wc.style &= ~CS_OWNDC;
-	}
 	wc.lpfnWndProc = (WNDPROC)::WndProc;
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = 0;

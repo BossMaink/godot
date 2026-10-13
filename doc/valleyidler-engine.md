@@ -16,7 +16,8 @@ This fork retains the project's transparent desktop presentation fixes while fol
 - `GODOT_VULKAN_D3D11_TRACE=<output-prefix>`: collect bridge-stage diagnostics, written when the bridge is destroyed. Leave unset in normal operation.
 - `GODOT_VULKAN_D3D11_REFERENCE=1`: restore per-frame GetBuffer/Flush for local comparison.
 - `GODOT_CAPTURE_LAYERED_WINDOWS=1`: include layered windows in native diagnostic screenshots.
-- `GODOT_VULKAN_LAYERED_READBACK=1`: legacy diagnostic CPU-readback prototype, disabled by default. Never combine it with the GPU bridge or use it as the release presentation path.
+
+The discarded CPU-readback presentation prototype and its activation switch have been removed. Historical measurements remain in the project evidence only.
 
 D3D12 uses its existing native Windows presentation implementation. Non-Windows platforms keep their existing rendering paths. Device loss, older Vulkan implementations and cross-vendor bridge coverage remain to be validated.
 
