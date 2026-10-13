@@ -78,6 +78,7 @@ layout(constant_id = 14) const bool glow_mode_screen = false;
 layout(constant_id = 15) const bool glow_mode_softlight = false;
 layout(constant_id = 16) const bool glow_mode_replace = false;
 layout(constant_id = 17) const bool glow_mode_mix = false;
+layout(constant_id = 18) const bool premultiplied_alpha = false;
 
 layout(push_constant, std430) uniform Params {
 	vec3 bcs;
@@ -764,6 +765,12 @@ void main() {
 	}
 #endif
 
+	// Nonlinear transforms must operate on unassociated RGB. Restore coverage
+	// afterwards for transparent render targets and desktop premultiplied blending.
+	if (premultiplied_alpha) {
+		color.rgb = color.a > 0.0 ? color.rgb / color.a : vec3(0.0);
+	}
+
 	// Tonemap to lower dynamic range.
 
 	color.rgb = apply_tonemapping(color.rgb);
@@ -829,6 +836,10 @@ void main() {
 	} else if (deband_10_bit) {
 		// Divide by 1023 to align to 10-bit quantization.
 		color.rgb += screen_space_dither(gl_FragCoord.xy, 1023.0);
+	}
+
+	if (premultiplied_alpha) {
+		color.rgb *= color.a;
 	}
 
 	frag_color = color;

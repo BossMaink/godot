@@ -39,11 +39,15 @@
 class RenderingContextDriverVulkanWindows : public RenderingContextDriverVulkan {
 private:
 	const char *_get_platform_surface_extension() const override final;
+	HashMap<SurfaceID, HWND> experiment_windows;
+	HashMap<SurfaceID, HWND> original_windows;
 
 protected:
 	SurfaceID surface_create(const void *p_platform_data) override final;
+	void surface_destroy(SurfaceID p_surface) override final;
 
 public:
+	HWND get_original_window(SurfaceID surface) const { return original_windows[surface]; }
 	struct WindowPlatformData {
 		HWND window;
 		HINSTANCE instance;

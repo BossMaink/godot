@@ -157,6 +157,8 @@ void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_co
 
 	render_target = p_config->get_render_target();
 	force_hdr = texture_storage->render_target_is_using_hdr(render_target);
+	// Mobile RGB10A2 only has four alpha levels; preserve transparent coverage.
+	transparent_bg = texture_storage->render_target_get_transparent(render_target);
 
 	target_size = p_config->get_target_size();
 	internal_size = p_config->get_internal_size();
@@ -219,6 +221,8 @@ void RenderSceneBuffersRD::configure_for_reflections(const Size2i p_reflection_s
 	target_size = p_reflection_size;
 	internal_size = p_reflection_size;
 	render_target = RID();
+	force_hdr = false;
+	transparent_bg = false;
 	scaling_3d_mode = RSE::VIEWPORT_SCALING_3D_MODE_OFF;
 	fsr_sharpness = 0.0;
 	msaa_3d = RSE::VIEWPORT_MSAA_DISABLED;

@@ -1357,6 +1357,8 @@ void RendererViewport::viewport_set_transparent_background(RID p_viewport, bool 
 
 	RSG::texture_storage->render_target_set_transparent(viewport->render_target, p_enabled);
 	viewport->transparent_bg = p_enabled;
+	// Transparency may change the required 3D color-buffer alpha precision.
+	_configure_3d_render_buffers(viewport);
 }
 
 void RendererViewport::viewport_set_global_canvas_transform(RID p_viewport, const Transform2D &p_transform) {

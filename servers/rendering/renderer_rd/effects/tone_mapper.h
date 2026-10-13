@@ -75,6 +75,7 @@ private:
 		TONEMAP_FLAG_USE_FXAA = (1 << 4),
 		TONEMAP_FLAG_USE_8_BIT_DEBANDING = (1 << 5),
 		TONEMAP_FLAG_CONVERT_TO_SRGB = (1 << 6),
+		TONEMAP_FLAG_PREMULTIPLIED_ALPHA = (1 << 7),
 	};
 
 	enum FlagsMobile {
@@ -98,7 +99,8 @@ private:
 		TONEMAP_MOBILE_FLAG_GLOW_MODE_SOFTLIGHT = (1 << 15),
 		TONEMAP_MOBILE_FLAG_GLOW_MODE_REPLACE = (1 << 16),
 		TONEMAP_MOBILE_FLAG_GLOW_MODE_MIX = (1 << 17),
-		TONEMAP_MOBILE_ADRENO_BUG = (1 << 18), // Needs to be last so we force the pipeline cache to specify specializations for all variants.
+		TONEMAP_MOBILE_FLAG_PREMULTIPLIED_ALPHA = (1 << 18),
+		TONEMAP_MOBILE_ADRENO_BUG = (1 << 19), // Needs to be last so we force the pipeline cache to specify specializations for all variants.
 	};
 
 	struct TonemapPushConstant {
@@ -207,6 +209,7 @@ public:
 		bool bilinear_filtering = true;
 
 		bool convert_to_srgb = false;
+		bool premultiplied_alpha = false;
 	};
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);

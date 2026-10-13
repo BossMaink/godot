@@ -424,6 +424,7 @@ public:
 
 private:
 	struct SwapChain {
+		void *gpu_bridge = nullptr;
 		VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;
 		RenderingContextDriver::SurfaceID surface = RenderingContextDriver::SurfaceID();
 		VkFormat format = VK_FORMAT_UNDEFINED;
@@ -445,6 +446,9 @@ private:
 
 	bool _determine_swap_chain_format(RenderingContextDriver::SurfaceID p_surface, VkFormat &r_format, VkColorSpaceKHR &r_color_space, RDD::ColorSpace &r_rdd_color_space);
 	void _swap_chain_release(SwapChain *p_swap_chain);
+#ifdef WINDOWS_ENABLED
+	Error _swap_chain_resize_d3d11(CommandQueue *command_queue, SwapChain *swap_chain);
+#endif
 
 public:
 	virtual SwapChainID swap_chain_create(RenderingContextDriver::SurfaceID p_surface) override final;
@@ -473,6 +477,7 @@ private:
 		VkImage swap_chain_image = VK_NULL_HANDLE;
 		VkImageSubresourceRange swap_chain_image_subresource_range = {};
 		bool swap_chain_acquired = false;
+		uint32_t external_queue_family = UINT32_MAX;
 	};
 
 public:

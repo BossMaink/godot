@@ -5314,12 +5314,12 @@ void TextureStorage::render_target_copy_to_back_buffer(RID p_render_target, cons
 	// TODO figure out stereo support here
 
 	if (RendererSceneRenderRD::get_singleton()->_render_buffers_can_be_storage()) {
-		copy_effects->copy_to_rect(rt->color, rt->backbuffer_mipmap0, region, false, false, false, !rt->use_hdr, true);
+		copy_effects->copy_to_rect(rt->color, rt->backbuffer_mipmap0, region, false, false, false, !rt->use_hdr, !rt->is_transparent);
 	} else {
 		Rect2 src_rect = Rect2(region);
 		src_rect.position /= Size2(rt->size);
 		src_rect.size /= Size2(rt->size);
-		copy_effects->copy_to_fb_rect(rt->color, rt->backbuffer_fb, region, false, false, false, false, RID(), false, true, false, false, src_rect);
+		copy_effects->copy_to_fb_rect(rt->color, rt->backbuffer_fb, region, false, false, false, false, RID(), false, !rt->is_transparent, false, false, src_rect);
 	}
 
 	if (!p_gen_mipmaps) {

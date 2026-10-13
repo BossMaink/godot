@@ -69,6 +69,7 @@ class RenderSceneBuffersRD : public RenderSceneBuffers {
 private:
 	bool can_be_storage = true;
 	bool force_hdr = false;
+	bool transparent_bg = false;
 	uint32_t max_cluster_elements = 512;
 	RD::DataFormat preferred_data_format = RD::DATA_FORMAT_MAX;
 	RendererRD::VRS *vrs = nullptr;
@@ -195,7 +196,7 @@ public:
 	uint32_t get_max_cluster_elements() { return max_cluster_elements; }
 	void set_preferred_data_format(const RD::DataFormat p_preferred_data_format) { preferred_data_format = p_preferred_data_format; }
 	RD::DataFormat get_preferred_data_format() const { return preferred_data_format; }
-	RD::DataFormat get_base_data_format() const { return force_hdr ? RD::DATA_FORMAT_R16G16B16A16_SFLOAT : preferred_data_format; }
+	RD::DataFormat get_base_data_format() const { return (force_hdr || transparent_bg) ? RD::DATA_FORMAT_R16G16B16A16_SFLOAT : preferred_data_format; }
 	float get_luminance_multiplier() const;
 	void set_vrs(RendererRD::VRS *p_vrs) { vrs = p_vrs; }
 	RSE::ViewportVRSMode get_vrs_mode() { return vrs_mode; }

@@ -1603,6 +1603,14 @@ float DisplayServerWindows::screen_get_scale(int p_screen) const {
 }
 
 Color DisplayServerWindows::screen_get_pixel(const Point2i &p_position) const {
+	if (OS::get_singleton()->get_environment("GODOT_CAPTURE_LAYERED_WINDOWS") == "1") {
+		Ref<Image> capture = screen_get_image_rect(Rect2i(p_position, Size2i(1, 1)));
+		if (capture.is_valid()) {
+			Color pixel = capture->get_pixel(0, 0);
+			pixel.a = 1.0;
+			return pixel;
+		}
+	}
 	Point2i pos = p_position + _get_screens_origin();
 
 	POINT p;
@@ -1651,7 +1659,7 @@ Ref<Image> DisplayServerWindows::screen_get_image(int p_screen) const {
 			HBITMAP hbm = CreateCompatibleBitmap(dc, width, height);
 			if (hbm) {
 				SelectObject(hdc, hbm);
-				BitBlt(hdc, 0, 0, width, height, dc, p1.x, p1.y, SRCCOPY);
+				BitBlt(hdc, 0, 0, width, height, dc, p1.x, p1.y, SRCCOPY | (OS::get_singleton()->get_environment("GODOT_CAPTURE_LAYERED_WINDOWS") == "1" ? CAPTUREBLT : 0));
 
 				BITMAPINFO bmp_info = {};
 				bmp_info.bmiHeader.biSize = sizeof(bmp_info.bmiHeader);
@@ -1705,7 +1713,7 @@ Ref<Image> DisplayServerWindows::screen_get_image_rect(const Rect2i &p_rect) con
 			HBITMAP hbm = CreateCompatibleBitmap(dc, width, height);
 			if (hbm) {
 				SelectObject(hdc, hbm);
-				BitBlt(hdc, 0, 0, width, height, dc, p1.x, p1.y, SRCCOPY);
+				BitBlt(hdc, 0, 0, width, height, dc, p1.x, p1.y, SRCCOPY | (OS::get_singleton()->get_environment("GODOT_CAPTURE_LAYERED_WINDOWS") == "1" ? CAPTUREBLT : 0));
 
 				BITMAPINFO bmp_info = {};
 				bmp_info.bmiHeader.biSize = sizeof(bmp_info.bmiHeader);
@@ -1923,7 +1931,7 @@ DisplayServerEnums::WindowID DisplayServerWindows::create_sub_window(DisplayServ
 
 	bool no_redirection_bitmap = false;
 #ifdef DCOMP_ENABLED
-	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && rendering_driver == "d3d12";
+	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && (rendering_driver == "d3d12" || (rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1"));
 #endif
 
 	DisplayServerEnums::WindowID window_id = window_id_counter;
@@ -8043,6 +8051,10 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 	memset(&wc, 0, sizeof(WNDCLASSEXW));
 	wc.cbSize = sizeof(WNDCLASSEXW);
 	wc.style = CS_OWNDC | CS_DBLCLKS;
+	if (p_rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_LAYERED_READBACK") == "1") {
+		// WS_EX_LAYERED is incompatible with CS_OWNDC. Only this opt-in Vulkan experiment uses it.
+		wc.style &= ~CS_OWNDC;
+	}
 	wc.lpfnWndProc = (WNDPROC)::WndProc;
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = 0;
@@ -8163,7 +8175,7 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 			if (rendering_context->initialize() == OK) {
 				// The window needs to be recreated when this value differs, because it cannot be added or removed after creation.
 #ifdef DCOMP_ENABLED
-				bool new_no_redirection_bitmap_value = OS::get_singleton()->is_layered_allowed() && tested_rendering_driver == "d3d12";
+				bool new_no_redirection_bitmap_value = OS::get_singleton()->is_layered_allowed() && (tested_rendering_driver == "d3d12" || (tested_rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1"));
 #else
 				bool new_no_redirection_bitmap_value = false;
 #endif
@@ -8360,7 +8372,7 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 
 #ifdef RD_ENABLED
 #ifdef DCOMP_ENABLED
-	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && rendering_driver == "d3d12";
+	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && (rendering_driver == "d3d12" || (rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1"));
 #endif
 
 	// The window may still need to be recreated when all RD backends fail and it falls back to OpenGL.
