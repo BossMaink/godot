@@ -606,7 +606,7 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	// can and will fill the validation layers with useless info otherwise if not enabled.
 	_register_requested_device_extension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, false);
 #ifdef WINDOWS_ENABLED
-	if (OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1") {
+	if ((OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1" || bool(GLOBAL_GET("rendering/rendering_device/vulkan/windows_d3d11_transparency")))) {
 		_register_requested_device_extension(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME, true);
 		_register_requested_device_extension(VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME, true);
 	}
@@ -3813,7 +3813,7 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 	// Release all current contents of the swap chain.
 	_swap_chain_release(swap_chain);
 #ifdef WINDOWS_ENABLED
-	if (OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1") {
+	if ((OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1" || bool(GLOBAL_GET("rendering/rendering_device/vulkan/windows_d3d11_transparency")))) {
 		return _swap_chain_resize_d3d11(command_queue, swap_chain);
 	}
 #endif
@@ -4132,6 +4132,9 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 
 #ifdef WINDOWS_ENABLED
 Error RenderingDeviceDriverVulkan::_swap_chain_resize_d3d11(CommandQueue *command_queue, SwapChain *swap_chain) {
+#ifdef TOOLS_ENABLED
+	ERR_FAIL_COND_V_MSG(OS::get_singleton()->get_environment("GODOT_TEST_RENDERING_FAILURES").split(",").has("d3d11_bridge"), ERR_UNAVAILABLE, "Injected D3D11 bridge initialization failure.");
+#endif
 	RenderingContextDriverVulkan::Surface *surface = (RenderingContextDriverVulkan::Surface *)swap_chain->surface;
 	ERR_FAIL_COND_V(surface->width == 0 || surface->height == 0, ERR_SKIP);
 	ERR_FAIL_COND_V_MSG(surface->hdr_output, ERR_UNAVAILABLE, "Vulkan D3D11 evaluation currently supports SDR only.");

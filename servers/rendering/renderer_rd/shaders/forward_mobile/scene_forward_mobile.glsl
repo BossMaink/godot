@@ -10,7 +10,11 @@
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
 
+#ifdef MOBILE_COMPATIBILITY_CUSTOM_LIGHTING
+#define SHADER_IS_SRGB true
+#else
 #define SHADER_IS_SRGB false
+#endif
 #define SHADER_SPACE_FAR 0.0
 
 #ifdef SHADOW_PASS
@@ -823,7 +827,11 @@ void main() {
 
 #VERSION_DEFINES
 
+#ifdef MOBILE_COMPATIBILITY_CUSTOM_LIGHTING
+#define SHADER_IS_SRGB true
+#else
 #define SHADER_IS_SRGB false
+#endif
 #define SHADER_SPACE_FAR 0.0
 
 #ifdef SHADOW_PASS
@@ -974,6 +982,16 @@ layout(set = MATERIAL_UNIFORM_SET, binding = 0, std140) uniform MaterialUniforms
 #GLOBALS
 
 #define scene_data scene_data_block.data
+
+#ifdef MOBILE_COMPATIBILITY_CUSTOM_LIGHTING
+vec3 mobile_authored_encode(vec3 color) {
+	color = max(color, vec3(0.0));
+	return mix(color * 12.92, 1.055 * pow(color, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), color));
+}
+vec3 mobile_authored_decode(vec3 color) {
+	return mix(color / 12.92, pow(max((color + 0.055) / 1.055, vec3(0.0)), vec3(2.4)), step(vec3(0.04045), color));
+}
+#endif
 
 /* clang-format on */
 
@@ -1244,6 +1262,11 @@ void main() {
 	{
 #CODE : FRAGMENT
 	}
+
+#ifdef MOBILE_COMPATIBILITY_CUSTOM_LIGHTING
+	albedo_highp = mobile_authored_decode(albedo_highp);
+	emission_highp = mobile_authored_decode(emission_highp);
+#endif
 
 	// Store variables in half precision after user shader code is run.
 	hvec3 view = hvec3(view_highp);
@@ -1991,6 +2014,10 @@ void main() {
 
 // LIGHTING
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+	vec3 authored_additive_linear = vec3(0.0);
+	vec3 authored_additive_srgb = vec3(0.0);
+#endif
 #ifdef USE_VERTEX_LIGHTING
 	diffuse_light += hvec3(diffuse_light_interp.rgb);
 	direct_specular_light += hvec3(specular_light_interp.rgb) * f0;
@@ -2202,6 +2229,10 @@ void main() {
 			shadow = half(1.0);
 #endif
 
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+			vec3 authored_previous_diffuse = vec3(diffuse_light);
+			vec3 authored_previous_specular = vec3(direct_specular_light);
+#endif
 			float size_A = sc_use_light_soft_shadows() ? directional_lights.data[i].size : 0.0;
 
 			light_compute(normal, hvec3(directional_lights.data[i].direction), view, saturateHalf(size_A),
@@ -2230,6 +2261,16 @@ void main() {
 #endif
 					diffuse_light,
 					direct_specular_light);
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+			// GLES adds shadowed directional lights as separate encoded passes.
+			// Unshadowed moon/point lights remain in the ordinary base pass.
+			if (directional_lights.data[i].shadow_opacity > 0.001) {
+				vec3 contribution = (vec3(diffuse_light) - authored_previous_diffuse) * vec3(albedo) * float(ao) * (1.0 - float(metallic))
+						+ (vec3(direct_specular_light) - authored_previous_specular) * float(ao);
+				authored_additive_linear += contribution;
+				authored_additive_srgb += mobile_authored_encode(contribution);
+			}
+#endif
 		}
 #endif // USE_VERTEX_LIGHTING
 	} //directional light
@@ -2414,6 +2455,11 @@ void main() {
 	hvec4 out_color = hvec4(albedo, alpha);
 #else // MODE_UNSHADED
 	hvec4 out_color = hvec4(emission + ambient_light + diffuse_light + direct_specular_light + indirect_specular_light, alpha);
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+	if (any(greaterThan(authored_additive_srgb, vec3(0.0)))) {
+		out_color.rgb = hvec3(mobile_authored_decode(min(mobile_authored_encode(vec3(out_color.rgb) - authored_additive_linear) + authored_additive_srgb, vec3(1.0))));
+	}
+#endif
 #endif // MODE_UNSHADED
 
 #ifndef FOG_DISABLED

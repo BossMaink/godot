@@ -5482,7 +5482,7 @@ uint32_t RenderingDevice::_get_swap_chain_desired_count() const {
 	return MAX(2U, uint32_t(GLOBAL_GET_CACHED(uint32_t, "rendering/rendering_device/vsync/swapchain_image_count")));
 }
 
-Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen) {
+Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen, bool p_validate_presentation) {
 	_THREAD_SAFE_METHOD_
 
 	RenderingContextDriver::SurfaceID surface = context->surface_get_from_window(p_screen);
@@ -5493,6 +5493,16 @@ Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen) {
 
 	RDD::SwapChainID swap_chain = driver->swap_chain_create(surface);
 	ERR_FAIL_COND_V_MSG(swap_chain.id == 0, ERR_CANT_CREATE, "Unable to create swap chain.");
+
+	// Validate actual presentation resources before accepting a startup driver.
+	// In particular, Vulkan device support does not imply D3D11 texture sharing.
+	if (p_validate_presentation) {
+		Error error = driver->swap_chain_resize(main_queue, swap_chain, _get_swap_chain_desired_count());
+		if (error != OK) {
+			driver->swap_chain_free(swap_chain);
+			return error;
+		}
+	}
 
 	screen_swap_chains[p_screen] = swap_chain;
 

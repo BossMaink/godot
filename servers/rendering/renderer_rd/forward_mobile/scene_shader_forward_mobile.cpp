@@ -239,6 +239,13 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
 #endif
 
+	// Opt-in authored color contract for custom spatial lighting only. Keep
+	// resource uniforms intact so runtime generators and color edits work normally.
+	compatibility_custom_lighting = bool(GLOBAL_GET("rendering/renderer/mobile_compatibility_custom_lighting")) && gen_code.code.has("light") && !unshaded;
+	if (compatibility_custom_lighting) {
+		gen_code.defines.push_back("#define MOBILE_COMPATIBILITY_CUSTOM_LIGHTING\n");
+	}
+
 	SceneShaderForwardMobile::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
 
 	ubo_size = gen_code.uniform_total_size;
@@ -547,7 +554,7 @@ bool SceneShaderForwardMobile::MaterialData::update_parameters(const HashMap<Str
 	if (shader_data->version.is_valid()) {
 		RID base_shader = SceneShaderForwardMobile::singleton->shader.version_get_shader(shader_data->version, (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0));
 		MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
-		return update_parameters_uniform_set(p_parameters, p_uniform_dirty, p_textures_dirty, shader_data->uniforms, shader_data->ubo_offsets.ptr(), shader_data->texture_uniforms, shader_data->default_texture_params, shader_data->ubo_size, uniform_set, base_shader, RenderForwardMobile::MATERIAL_UNIFORM_SET, true, true);
+		return update_parameters_uniform_set(p_parameters, p_uniform_dirty, p_textures_dirty, shader_data->uniforms, shader_data->ubo_offsets.ptr(), shader_data->texture_uniforms, shader_data->default_texture_params, shader_data->ubo_size, uniform_set, base_shader, RenderForwardMobile::MATERIAL_UNIFORM_SET, !shader_data->compatibility_custom_lighting, true);
 	} else {
 		return false;
 	}

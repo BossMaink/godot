@@ -265,6 +265,7 @@ public:
 		bool uses_bent_normal_map = false;
 		bool wireframe = false;
 
+		bool compatibility_custom_lighting = false;
 		bool unshaded = false;
 		bool uses_vertex = false;
 		bool uses_sss = false;

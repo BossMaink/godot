@@ -1931,7 +1931,7 @@ DisplayServerEnums::WindowID DisplayServerWindows::create_sub_window(DisplayServ
 
 	bool no_redirection_bitmap = false;
 #ifdef DCOMP_ENABLED
-	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && (rendering_driver == "d3d12" || (rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1"));
+	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && (rendering_driver == "d3d12" || (rendering_driver == "vulkan" && (OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1" || bool(GLOBAL_GET("rendering/rendering_device/vulkan/windows_d3d11_transparency")))));
 #endif
 
 	DisplayServerEnums::WindowID window_id = window_id_counter;
@@ -8124,6 +8124,7 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 	}
 
 #ifdef RD_ENABLED
+	bool startup_screen_created = false;
 	bool fallback_to_vulkan = GLOBAL_GET("rendering/rendering_device/fallback_to_vulkan");
 	bool fallback_to_d3d12 = GLOBAL_GET("rendering/rendering_device/fallback_to_d3d12");
 
@@ -8168,10 +8169,16 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 		}
 #endif
 		if (rendering_context != nullptr) {
-			if (rendering_context->initialize() == OK) {
+#ifdef TOOLS_ENABLED
+			bool inject_failure = OS::get_singleton()->get_environment("GODOT_TEST_RENDERING_FAILURES").split(",").has(tested_rendering_driver);
+			if (inject_failure) { WARN_PRINT("Injected startup failure: " + tested_rendering_driver); }
+#else
+			bool inject_failure = false;
+#endif
+			if (!inject_failure && rendering_context->initialize() == OK) {
 				// The window needs to be recreated when this value differs, because it cannot be added or removed after creation.
 #ifdef DCOMP_ENABLED
-				bool new_no_redirection_bitmap_value = OS::get_singleton()->is_layered_allowed() && (tested_rendering_driver == "d3d12" || (tested_rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1"));
+				bool new_no_redirection_bitmap_value = OS::get_singleton()->is_layered_allowed() && (tested_rendering_driver == "d3d12" || (tested_rendering_driver == "vulkan" && (OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1" || bool(GLOBAL_GET("rendering/rendering_device/vulkan/windows_d3d11_transparency")))));
 #else
 				bool new_no_redirection_bitmap_value = false;
 #endif
@@ -8194,7 +8201,12 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 #ifdef RD_ENABLED
 				if (_create_rendering_context_window(DisplayServerEnums::MAIN_WINDOW_ID, tested_rendering_driver) == OK) {
 					rendering_device = memnew(RenderingDevice);
-					if (rendering_device->initialize(rendering_context, DisplayServerEnums::MAIN_WINDOW_ID) == OK) {
+					Error device_error = rendering_device->initialize(rendering_context, DisplayServerEnums::MAIN_WINDOW_ID);
+					if (device_error == OK && (OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1" || bool(GLOBAL_GET("rendering/rendering_device/vulkan/windows_d3d11_transparency")))) {
+						device_error = rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID, true);
+						startup_screen_created = device_error == OK;
+					}
+					if (device_error == OK) {
 #ifdef VULKAN_ENABLED
 						if (rendering_driver == "vulkan" && tested_rendering_driver == "d3d12") {
 							WARN_PRINT("Your video card drivers seem not to support Vulkan, switching to Direct3D 12.");
@@ -8368,7 +8380,7 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 
 #ifdef RD_ENABLED
 #ifdef DCOMP_ENABLED
-	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && (rendering_driver == "d3d12" || (rendering_driver == "vulkan" && OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1"));
+	no_redirection_bitmap = OS::get_singleton()->is_layered_allowed() && (rendering_driver == "d3d12" || (rendering_driver == "vulkan" && (OS::get_singleton()->get_environment("GODOT_VULKAN_D3D11_PRESENT") == "1" || bool(GLOBAL_GET("rendering/rendering_device/vulkan/windows_d3d11_transparency")))));
 #endif
 
 	// The window may still need to be recreated when all RD backends fail and it falls back to OpenGL.
@@ -8458,7 +8470,9 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Dis
 	if (rendering_context) {
 		DEV_ASSERT(rendering_device != nullptr);
 
-		rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
+		if (!startup_screen_created) {
+			rendering_device->screen_create(DisplayServerEnums::MAIN_WINDOW_ID);
+		}
 
 		RendererCompositorRD::make_current();
 	}
