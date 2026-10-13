@@ -378,7 +378,7 @@ void RasterizerCanvasGLES3::canvas_render_items(RID p_to_render_target, Item *p_
 
 		glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-		glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->max_texture_image_units - 8);
+		glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->global_shader_parameters_texture_unit);
 		glBindTexture(GL_TEXTURE_2D, material_storage->global_shader_parameters_get_texture());
 	}
 

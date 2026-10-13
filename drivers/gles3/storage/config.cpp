@@ -121,6 +121,10 @@ Config::Config() {
 
 	glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &max_vertex_texture_image_units);
 	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &max_texture_image_units);
+	// Texture unit indices use the combined limit, not the per-stage sampler count.
+	// Reserve the last unit so material textures cannot overwrite global parameters.
+	glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &global_shader_parameters_texture_unit);
+	global_shader_parameters_texture_unit--;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
 	glGetIntegerv(GL_MAX_VIEWPORT_DIMS, max_viewport_size);
 	glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &max_vertex_attribs);

@@ -59,6 +59,7 @@ public:
 
 	GLint max_vertex_texture_image_units = 0;
 	GLint max_texture_image_units = 0;
+	GLint global_shader_parameters_texture_unit = 0;
 	GLint max_texture_size = 0;
 	GLint max_viewport_size[2] = { 0, 0 };
 	GLint max_vertex_attribs = 0;

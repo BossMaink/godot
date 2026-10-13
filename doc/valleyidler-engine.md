@@ -7,6 +7,9 @@ This fork retains the project's transparent desktop presentation fixes while fol
 - Preserve RD screen-copy alpha for transparent targets; opaque targets still force alpha to one.
 - Tonemap transparent Forward+ and Mobile buffers with premultiplied-alpha semantics. Give transparent Mobile buffers sufficient alpha precision.
 - Preserve the existing Compatibility foliage blend and GodotSharp shutdown fixes in this fork's history.
+- Reserve a separate combined texture unit for GLES global parameters. Upstream's stage-local slot overlapped a 21-texture material and corrupted subsequent tree draws; the isolated 80-instance regression now passes.
+- Match the GLES particle material UBO binding to the upstream C++ binding enum after removal of the global UBO.
+- Use upstream translation generation and compilation unchanged; the local per-language compilation split has been removed.
 - Provide an opt-in Windows Vulkan-to-D3D11 shared GPU texture presentation path using DirectComposition. This path imports same-adapter D3D11 textures into Vulkan, synchronizes with keyed mutexes and copies on the GPU. It does not read pixels back to the CPU.
 - Reuse D3D11 backbuffer references and Vulkan submission arrays, and omit redundant per-frame Flush before Present.
 

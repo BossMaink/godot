@@ -1044,7 +1044,7 @@ void ParticlesStorage::update_particles() {
 	glEnable(GL_RASTERIZER_DISCARD);
 	glBindFramebuffer(GL_FRAMEBUFFER, GLES3::TextureStorage::system_fbo);
 
-	glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->max_texture_image_units - 2);
+	glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->global_shader_parameters_texture_unit);
 	glBindTexture(GL_TEXTURE_2D, GLES3::MaterialStorage::get_singleton()->global_shader_parameters_get_texture());
 
 	while (particle_update_list.first()) {

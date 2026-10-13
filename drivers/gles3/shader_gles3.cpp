@@ -294,6 +294,13 @@ void ShaderGLES3::_get_uniform_locations(Version::Specialization &spec, Version 
 		}
 	}
 
+	// Shared by scene, canvas, sky and particle shaders. Keep this outside the
+	// material and pass-local texture ranges, including unused material samplers.
+	GLint global_parameters_location = glGetUniformLocation(spec.id, "global_shader_parameters_texture");
+	if (global_parameters_location >= 0) {
+		glUniform1i(global_parameters_location, GLES3::Config::get_singleton()->global_shader_parameters_texture_unit);
+	}
+
 	for (int i = 0; i < ubo_count; i++) {
 		GLint loc = glGetUniformBlockIndex(spec.id, ubo_pairs[i].name);
 		if (loc >= 0) {

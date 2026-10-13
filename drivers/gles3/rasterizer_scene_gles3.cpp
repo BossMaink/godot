@@ -799,7 +799,7 @@ void RasterizerSceneGLES3::_setup_sky(const RenderDataGLES3 *p_render_data, cons
 	bool sun_scatter_enabled = environment_get_fog_enabled(p_render_data->environment) && environment_get_fog_sun_scatter(p_render_data->environment) > 0.001;
 	glBindBufferBase(GL_UNIFORM_BUFFER, SKY_DIRECTIONAL_LIGHT_UNIFORM_LOCATION, sky_globals.directional_light_buffer);
 
-	glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->max_texture_image_units - 4);
+	glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->global_shader_parameters_texture_unit);
 	glBindTexture(GL_TEXTURE_2D, GLES3::MaterialStorage::get_singleton()->global_shader_parameters_get_texture());
 	if (shader_data->uses_light || sun_scatter_enabled) {
 		sky_globals.directional_light_count = 0;
@@ -1567,7 +1567,7 @@ void RasterizerSceneGLES3::_update_scene_ubo(GLuint &p_ubo_buffer, GLuint p_inde
 }
 
 void RasterizerSceneGLES3::_bind_global_shader_parameters() {
-	glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->max_texture_image_units - 13);
+	glActiveTexture(GL_TEXTURE0 + GLES3::Config::get_singleton()->global_shader_parameters_texture_unit);
 	glBindTexture(GL_TEXTURE_2D, GLES3::MaterialStorage::get_singleton()->global_shader_parameters_get_texture());
 }
 
