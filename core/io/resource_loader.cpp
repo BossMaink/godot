@@ -259,7 +259,7 @@ void ResourceLoader::LoadToken::clear() {
 	}
 
 	// If task is unused, await it here, locally, now the token data is consistent.
-	if (task_to_await) {
+	if (task_to_await && task_to_await != WorkerThreadPool::get_singleton()->get_caller_task_id()) {
 		int load_nesting_backup = load_nesting;
 		load_nesting = 0;
 		WorkerThreadPool::get_singleton()->wait_for_task_completion(task_to_await);
@@ -506,7 +506,7 @@ void ResourceLoader::_run_load_task(void *p_userdata) {
 		}
 
 		if (status != THREAD_LOAD_IN_PROGRESS) {
-			load_task.load_token->unreference();
+			LoadToken *load_token = load_task.load_token;
 			thread_load_mutex.lock();
 			if (thread_waiting_on_backup.is_empty()) {
 				thread_waiting_on.erase(thread_index);
@@ -514,6 +514,9 @@ void ResourceLoader::_run_load_task(void *p_userdata) {
 				thread_waiting_on[thread_index] = thread_waiting_on_backup;
 			}
 			thread_load_mutex.unlock();
+			if (load_token->unreference()) {
+				memdelete(load_token);
+			}
 			return;
 		}
 
@@ -671,9 +674,6 @@ void ResourceLoader::_run_load_task(void *p_userdata) {
 
 	thread_load_mutex.unlock();
 
-	// It's safe now to let the task go in case no one else was grabbing the token.
-	load_task.load_token->unreference();
-
 	if (load_nesting == 0) {
 		if (own_mq_override) {
 			MessageQueue::set_thread_singleton_override(nullptr);
@@ -684,6 +684,12 @@ void ResourceLoader::_run_load_task(void *p_userdata) {
 	curr_load_task = curr_load_task_backup;
 
 	print_verbose(vformat("Completed load for: '%s' remapped '%s' at thread %d", load_task.local_path, remapped_path, thread_index));
+
+	// Releasing the final task reference may destroy load_task. Do this only
+	// after restoring thread-local state and the final access to task data.
+	if (load_task.load_token->unreference()) {
+		memdelete(load_task.load_token);
+	}
 }
 
 String ResourceLoader::_validate_local_path(const String &p_path) {
@@ -1625,7 +1631,9 @@ void ResourceLoader::clear_thread_load_tasks() {
 		DEV_ASSERT(user_token->user_rc > 0 && !user_token->user_path.is_empty());
 		user_token->user_path.clear();
 		user_token->user_rc = 0;
-		user_token->unreference();
+		if (user_token->unreference()) {
+			memdelete(user_token);
+		}
 	}
 
 	thread_load_tasks.clear();

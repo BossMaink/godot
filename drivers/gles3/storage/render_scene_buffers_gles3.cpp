@@ -137,6 +137,7 @@ void RenderSceneBuffersGLES3::configure(const RenderSceneBuffersConfiguration *p
 	msaa3d.mode = p_config->get_msaa_3d();
 	//screen_space_aa = p_config->get_screen_space_aa();
 	//use_debanding = p_config->get_use_debanding();
+	force_depth_prepass = p_config->get_force_depth_prepass();
 	view_count = p_config->get_view_count();
 	emulate_multiview = view_count > 1 && !config->multiview_supported;
 

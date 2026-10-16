@@ -306,6 +306,7 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			rb_config.set_anisotropic_filtering_level(p_viewport->anisotropic_filtering_level);
 			rb_config.set_use_taa(use_taa);
 			rb_config.set_use_debanding(p_viewport->use_debanding);
+			rb_config.set_force_depth_prepass(p_viewport->force_depth_prepass);
 
 			p_viewport->render_buffers->configure(&rb_config);
 		}
@@ -1470,6 +1471,16 @@ void RendererViewport::viewport_set_use_taa(RID p_viewport, bool p_use_taa) {
 		num_viewports_with_motion_vectors += motion_vectors_after ? 1 : -1;
 	}
 
+	_configure_3d_render_buffers(viewport);
+}
+
+void RendererViewport::viewport_set_force_depth_prepass(RID p_viewport, bool p_enable) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+	if (viewport->force_depth_prepass == p_enable) {
+		return;
+	}
+	viewport->force_depth_prepass = p_enable;
 	_configure_3d_render_buffers(viewport);
 }
 

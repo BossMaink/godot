@@ -2773,7 +2773,7 @@ void RasterizerSceneGLES3::render_scene(const Ref<RenderSceneBuffers> &p_render_
 		glViewport(0, 0, rb->internal_size.x, rb->internal_size.y);
 
 		// Do depth prepass if it's explicitly enabled
-		bool use_depth_prepass = config->use_depth_prepass;
+		bool use_depth_prepass = config->use_depth_prepass || rb->force_depth_prepass;
 
 		// Forcibly enable depth prepass if opaque stencil writes are used.
 		use_depth_prepass = use_depth_prepass || scene_state.used_opaque_stencil;
@@ -3387,7 +3387,7 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 
 		if constexpr (p_pass_mode != PASS_MODE_SHADOW) {
 			if (shader->depth_draw == GLES3::SceneShaderData::DEPTH_DRAW_OPAQUE) {
-				scene_state.enable_gl_depth_draw((p_pass_mode == PASS_MODE_COLOR && !config->use_depth_prepass) || p_pass_mode == PASS_MODE_DEPTH || p_pass_mode == PASS_MODE_MOTION_VECTORS);
+				scene_state.enable_gl_depth_draw((p_pass_mode == PASS_MODE_COLOR && !scene_state.used_depth_prepass) || p_pass_mode == PASS_MODE_DEPTH || p_pass_mode == PASS_MODE_MOTION_VECTORS);
 			} else {
 				scene_state.enable_gl_depth_draw(shader->depth_draw == GLES3::SceneShaderData::DEPTH_DRAW_ALWAYS);
 			}

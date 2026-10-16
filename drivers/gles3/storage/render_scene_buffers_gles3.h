@@ -48,6 +48,7 @@ public:
 	//RSE::ViewportScreenSpaceAA screen_space_aa = RSE::VIEWPORT_SCREEN_SPACE_AA_DISABLED;
 	//bool use_taa = false;
 	//bool use_debanding = false;
+	bool force_depth_prepass = false;
 	uint32_t view_count = 1;
 	bool emulate_multiview = false;
 	bool apply_environment_effects_in_post = false;

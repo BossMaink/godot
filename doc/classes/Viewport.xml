@@ -636,7 +636,10 @@
 		<constant name="RENDER_INFO_DRAW_CALLS_IN_FRAME" value="2" enum="RenderInfo">
 			Amount of draw calls in frame.
 		</constant>
-		<constant name="RENDER_INFO_MAX" value="3" enum="RenderInfo">
+		<constant name="RENDER_INFO_MOBILE_PIPELINE_FALLBACKS_IN_FRAME" value="3" enum="RenderInfo">
+			Number of visible Mobile draw elements that used an ubershader while a specialized pipeline was unavailable in the latest rendered frame. Other rendering methods return zero. This describes the drawn image, not pending compilation jobs.
+		</constant>
+		<constant name="RENDER_INFO_MAX" value="4" enum="RenderInfo">
 			Represents the size of the [enum RenderInfo] enum.
 		</constant>
 		<constant name="RENDER_INFO_TYPE_VISIBLE" value="0" enum="RenderInfoType">

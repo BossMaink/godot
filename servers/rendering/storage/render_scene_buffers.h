@@ -52,6 +52,7 @@ private:
 	float texture_mipmap_bias = 0.0;
 	bool use_taa = false;
 	bool use_debanding = false;
+	bool force_depth_prepass = false;
 
 protected:
 	static void _bind_methods();
@@ -89,6 +90,9 @@ public:
 
 	bool get_use_taa() const { return use_taa; }
 	void set_use_taa(bool p_use_taa) { use_taa = p_use_taa; }
+
+	bool get_force_depth_prepass() const { return force_depth_prepass; }
+	void set_force_depth_prepass(bool p_enable) { force_depth_prepass = p_enable; }
 
 	bool get_use_debanding() const { return use_debanding; }
 	void set_use_debanding(bool p_use_debanding) { use_debanding = p_use_debanding; }

@@ -4517,6 +4517,15 @@
 				Sets when the viewport should be updated.
 			</description>
 		</method>
+		<method name="viewport_set_force_depth_prepass">
+			<return type="void" />
+			<param index="0" name="viewport" type="RID" />
+			<param index="1" name="enable" type="bool" />
+			<description>
+				If [param enable] is [code]true[/code], forces the existing opaque depth prepass for this viewport in Compatibility. Defaults to [code]false[/code], which preserves the project setting. Other rendering methods are unaffected.
+				This can stabilize MSAA capture at occlusion boundaries by establishing final depth coverage before shading, at the cost of an additional opaque draw pass. It does not change sample count or material shading.
+			</description>
+		</method>
 		<method name="viewport_set_use_debanding">
 			<return type="void" />
 			<param index="0" name="viewport" type="RID" />
@@ -5564,7 +5573,10 @@
 		<constant name="VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME" value="2" enum="ViewportRenderInfo">
 			Number of draw calls during this frame.
 		</constant>
-		<constant name="VIEWPORT_RENDER_INFO_MAX" value="3" enum="ViewportRenderInfo">
+		<constant name="VIEWPORT_RENDER_INFO_MOBILE_PIPELINE_FALLBACKS_IN_FRAME" value="3" enum="ViewportRenderInfo">
+			Number of visible Mobile draw elements that used an ubershader while a specialized pipeline was unavailable in the latest rendered frame. Other rendering methods return zero. This describes the drawn image, not pending compilation jobs.
+		</constant>
+		<constant name="VIEWPORT_RENDER_INFO_MAX" value="4" enum="ViewportRenderInfo">
 			Represents the size of the [enum ViewportRenderInfo] enum.
 		</constant>
 		<constant name="VIEWPORT_RENDER_INFO_TYPE_VISIBLE" value="0" enum="ViewportRenderInfoType">

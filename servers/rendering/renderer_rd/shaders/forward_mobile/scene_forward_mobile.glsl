@@ -2014,7 +2014,7 @@ void main() {
 
 // LIGHTING
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
-#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING)
 	vec3 authored_additive_linear = vec3(0.0);
 	vec3 authored_additive_srgb = vec3(0.0);
 #endif
@@ -2229,7 +2229,7 @@ void main() {
 			shadow = half(1.0);
 #endif
 
-#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING)
 			vec3 authored_previous_diffuse = vec3(diffuse_light);
 			vec3 authored_previous_specular = vec3(direct_specular_light);
 #endif
@@ -2261,7 +2261,7 @@ void main() {
 #endif
 					diffuse_light,
 					direct_specular_light);
-#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING)
 			// GLES adds shadowed directional lights as separate encoded passes.
 			// Unshadowed moon/point lights remain in the ordinary base pass.
 			if (directional_lights.data[i].shadow_opacity > 0.001) {
@@ -2455,7 +2455,7 @@ void main() {
 	hvec4 out_color = hvec4(albedo, alpha);
 #else // MODE_UNSHADED
 	hvec4 out_color = hvec4(emission + ambient_light + diffuse_light + direct_specular_light + indirect_specular_light, alpha);
-#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING) && !defined(AMBIENT_LIGHT_DISABLED)
+#if defined(MOBILE_COMPATIBILITY_CUSTOM_LIGHTING)
 	if (any(greaterThan(authored_additive_srgb, vec3(0.0)))) {
 		out_color.rgb = hvec3(mobile_authored_decode(min(mobile_authored_encode(vec3(out_color.rgb) - authored_additive_linear) + authored_additive_srgb, vec3(1.0))));
 	}

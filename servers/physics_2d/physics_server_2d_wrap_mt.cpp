@@ -109,6 +109,8 @@ void PhysicsServer2DWrapMT::finish() {
 		}
 		server_thread = Thread::MAIN_ID;
 	} else {
+		// Managed finalizers may enqueue resource frees after the last physics sync.
+		command_queue.flush_all();
 		physics_server_2d->finish();
 	}
 }

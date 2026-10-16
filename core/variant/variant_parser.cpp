@@ -1128,7 +1128,9 @@ Error VariantParser::parse_value(Token &r_token, Variant &r_value, Stream *p_str
 				return ERR_PARSE_ERROR;
 			}
 
-			static HashMap<StringName, Variant::Type> builtin_types;
+			// This function-local cache outlives StringName::cleanup().
+			// Keep plain string keys, as in the typed Array parser below.
+			static HashMap<String, Variant::Type> builtin_types;
 			if (builtin_types.is_empty()) {
 				for (int i = 1; i < Variant::VARIANT_MAX; i++) {
 					builtin_types[Variant::get_type_name((Variant::Type)i)] = (Variant::Type)i;
