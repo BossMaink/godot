@@ -29,6 +29,9 @@
 /**************************************************************************/
 
 #include "render_forward_mobile.h"
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+#include "modules/ambient_lighting/ambient_lighting_rd.h"
+#endif
 
 #include "core/config/project_settings.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
@@ -743,6 +746,22 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 	}
 #endif // MODULE_TEXTURE_STREAMING_ENABLED
 
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+	{
+		RD::Uniform u;
+		u.binding = 26;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.append_id(ambient_lighting->get_cube_buffer(p_render_data ? p_render_data->scenario : RID()));
+		uniforms.push_back(u);
+		u = RD::Uniform();
+		u.binding = 27;
+		u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+		RID ao = p_render_data ? p_render_data->ambient_occlusion_texture : RID();
+		u.append_id(ao.is_valid() ? ao : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE));
+		uniforms.push_back(u);
+	}
+#endif
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.get_default_shader_rd(is_multiview), RENDER_PASS_UNIFORM_SET, uniforms);
 }
 
@@ -1267,6 +1286,20 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			RENDER_TIMESTAMP("Render Opaque");
 		}
 
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+		AmbientLightingState::Occlusion occlusion;
+		if (!is_multiview && !is_reflection_probe && rb_data.is_valid() && ambient_lighting->get_occlusion(p_render_data->environment, occlusion)) {
+			RENDER_TIMESTAMP("Mobile Ambient Depth");
+			RID depth_fb = ambient_lighting->get_depth_framebuffer(rb);
+			RID depth_uniforms = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, p_render_data, false, radiance_texture, samplers, true);
+			RenderListParameters depth_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_AMBIENT_DEPTH, depth_uniforms, base_specialization, false, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold);
+			depth_params.pipeline_fallbacks = &pipeline_fallbacks;
+			_render_list_with_draw_list(&depth_params, depth_fb, RD::DRAW_CLEAR_DEPTH, Vector<Color>(), 0.0f);
+			RENDER_TIMESTAMP("Mobile SSAO");
+			p_render_data->ambient_occlusion_texture = ambient_lighting->render_occlusion(p_render_data, occlusion);
+			base_specialization.mobile_ambient_occlusion = p_render_data->ambient_occlusion_texture.is_valid();
+		}
+#endif
 		RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, p_render_data, is_multiview, radiance_texture, samplers, true);
 
 		// Set clear colors.
@@ -2443,6 +2476,9 @@ void RenderForwardMobile::_render_list(RenderingDevice::DrawListID p_draw_list, 
 		case PASS_MODE_COLOR_TRANSPARENT: {
 			_render_list_template<PASS_MODE_COLOR_TRANSPARENT>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
 		} break;
+		case PASS_MODE_AMBIENT_DEPTH: {
+			_render_list_template<PASS_MODE_AMBIENT_DEPTH>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+		} break;
 		case PASS_MODE_SHADOW: {
 			_render_list_template<PASS_MODE_SHADOW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
 		} break;
@@ -2559,6 +2595,12 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			mesh_surface = surf->surface;
 		}
 
+		if constexpr (p_pass_mode == PASS_MODE_AMBIENT_DEPTH) {
+			// Display portals and shaders sampling the current screen are not solid AO occluders.
+			if (shader->unshaded || shader->uses_screen_texture || shader->uses_depth_texture || shader->depth_draw == SceneShaderForwardMobile::ShaderData::DEPTH_DRAW_DISABLED || shader->depth_test != SceneShaderForwardMobile::ShaderData::DEPTH_TEST_ENABLED) {
+				continue;
+			}
+		}
 		if (!mesh_surface) {
 			continue;
 		}
@@ -2592,6 +2634,9 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				} else {
 					pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
 				}
+			} break;
+			case PASS_MODE_AMBIENT_DEPTH: {
+				pipeline_key.version = SceneShaderForwardMobile::SHADER_VERSION_AMBIENT_DEPTH;
 			} break;
 			case PASS_MODE_SHADOW: {
 				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS;
@@ -3625,6 +3670,10 @@ RenderForwardMobile::RenderForwardMobile() {
 	sky.set_texture_format(_render_buffers_get_preferred_color_format());
 
 	String defines;
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+	ambient_lighting = memnew(AmbientLightingRD);
+	defines += "\n#define AMBIENT_LIGHTING_MODULE\n";
+#endif
 
 	defines += "\n#define MAX_ROUGHNESS_LOD " + itos(get_roughness_layers() - 1) + ".0\n";
 	if (is_using_radiance_octmap_array()) {
@@ -3686,6 +3735,9 @@ RenderForwardMobile::RenderForwardMobile() {
 }
 
 RenderForwardMobile::~RenderForwardMobile() {
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+	memdelete(ambient_lighting);
+#endif
 	RSG::light_storage->directional_shadow_atlas_set_size(0);
 
 	if (ltc.lut1_texture.is_valid()) {

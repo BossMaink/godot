@@ -35,6 +35,11 @@
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 
+#include "modules/modules_enabled.gen.h"
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+class AmbientLightingRD;
+#endif
+
 #define RB_SCOPE_MOBILE SNAME("mobile")
 
 namespace RendererSceneRenderImplementation {
@@ -73,6 +78,9 @@ private:
 	/* Scene Shader */
 
 	SceneShaderForwardMobile scene_shader;
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+	AmbientLightingRD *ambient_lighting = nullptr;
+#endif
 	bool disable_ubershaders = false;
 
 	/* Render Buffer */
@@ -112,7 +120,7 @@ private:
 		PASS_MODE_COLOR_TRANSPARENT,
 		PASS_MODE_SHADOW,
 		PASS_MODE_SHADOW_DP,
-		// PASS_MODE_DEPTH,
+		PASS_MODE_AMBIENT_DEPTH,
 		// PASS_MODE_DEPTH_NORMAL_ROUGHNESS,
 		// PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI,
 		PASS_MODE_DEPTH_MATERIAL,

@@ -39,6 +39,8 @@
 #include "scene/resources/sky.h"
 #include "servers/rendering/rendering_server.h"
 
+#include "modules/modules_enabled.gen.h"
+
 RID Environment::get_rid() const {
 	return environment;
 }
@@ -1184,6 +1186,14 @@ void Environment::_validate_property(PropertyInfo &p_property) const {
 		}
 	}
 
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+	if (OS::get_singleton()->get_current_rendering_method() == "mobile" && bool(GLOBAL_GET("rendering/renderer/mobile_ssao")) && p_property.name.begins_with("ssao_")) {
+		if (p_property.name == "ssao_ao_channel_affect") {
+			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		}
+		return;
+	}
+#endif
 	if (OS::get_singleton()->get_current_rendering_method() != "forward_plus") {
 		// Hide SSAO properties that only work in Forward+.
 		if (p_property.name.begins_with("ssao_")) {

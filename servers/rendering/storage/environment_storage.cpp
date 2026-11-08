@@ -30,6 +30,10 @@
 
 #include "environment_storage.h"
 
+#include "core/config/project_settings.h"
+
+#include "modules/modules_enabled.gen.h"
+
 #ifdef DEBUG_ENABLED
 #include "core/os/os.h"
 #endif
@@ -696,8 +700,12 @@ void RendererEnvironmentStorage::environment_set_ssao(RID p_env, bool p_enable, 
 	Environment *env = environment_owner.get_or_null(p_env);
 	ERR_FAIL_NULL(env);
 #ifdef DEBUG_ENABLED
-	if (OS::get_singleton()->get_current_rendering_method() == "mobile" && p_enable) {
-		WARN_PRINT_ONCE_ED("Screen-space ambient occlusion (SSAO) is only available when using the Forward+ or Compatibility renderers.");
+	bool mobile_ssao_available = false;
+#ifdef MODULE_AMBIENT_LIGHTING_ENABLED
+	mobile_ssao_available = bool(GLOBAL_GET("rendering/renderer/mobile_ssao"));
+#endif
+	if (OS::get_singleton()->get_current_rendering_method() == "mobile" && p_enable && !mobile_ssao_available) {
+		WARN_PRINT_ONCE_ED("Mobile SSAO requires the ambient_lighting module and rendering/renderer/mobile_ssao. Forward+ and Compatibility use their existing SSAO paths.");
 	}
 #endif
 	env->ssao_enabled = p_enable;

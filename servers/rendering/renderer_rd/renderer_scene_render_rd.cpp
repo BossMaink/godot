@@ -1463,6 +1463,7 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.decals = &p_decals;
 		render_data.lightmaps = &p_lightmaps;
 		render_data.fog_volumes = &p_fog_volumes;
+		render_data.scenario = p_camera_data->scenario;
 		render_data.environment = p_environment;
 		render_data.compositor = p_compositor;
 		render_data.camera_attributes = p_camera_attributes;

@@ -303,6 +303,7 @@ public:
 	};
 
 	struct CameraData {
+		RID scenario;
 		// flags
 		uint32_t view_count;
 		bool is_orthogonal;

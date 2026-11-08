@@ -850,6 +850,7 @@ void main() {
 #include "../half_inc.glsl"
 
 /* Include our forward mobile UBOs definitions etc. */
+#include "../../../../../modules/ambient_lighting/ambient_cube_inc.glsl"
 #include "scene_forward_mobile_inc.glsl"
 
 /* Varyings */
@@ -1286,6 +1287,17 @@ void main() {
 	half anisotropy = half(anisotropy_highp);
 	hvec2 anisotropy_flow = hvec2(anisotropy_flow_highp);
 	half ao = half(ao_highp);
+	hvec2 screen_ao = hvec2(1.0);
+#ifdef AMBIENT_LIGHTING_MODULE
+	if (((sc_packed_2() >> 2) & 1U) != 0U) {
+		vec4 sampled_ao = textureLod(mobile_ambient_occlusion, gl_FragCoord.xy * scene_data.screen_pixel_size, 0.0);
+		// Reject another surface's AO, including transparent foreground geometry.
+		if (abs(sampled_ao.b + vertex.z) < max(0.015, abs(vertex.z) * 0.002)) {
+			screen_ao = hvec2(sampled_ao.rg);
+		}
+	}
+#endif
+
 	half ao_light_affect = half(ao_light_affect_highp);
 	half alpha = half(alpha_highp);
 	half normal_map_depth = half(normal_map_depth_highp);
@@ -1684,6 +1696,16 @@ void main() {
 	}
 #endif // !USE_LIGHTMAP
 
+#if defined(AMBIENT_LIGHTING_MODULE) && !defined(USE_LIGHTMAP)
+	// Keep authored fragment normals in full precision, as the IRRADIANCE contract does.
+	// Normal-mapped materials use the final perturbed shading normal.
+#ifdef NORMAL_MAP_USED
+	vec3 cube_normal = vec3(normal);
+#else
+	vec3 cube_normal = normal_highp;
+#endif
+	ambient_light = hvec3(ambient_cube_evaluate(vec3(ambient_light), (inv_view_matrix * vec4(vertex, 1.0)).xyz, mat3(inv_view_matrix) * cube_normal, instances.data[draw_call.instance_index].layer_mask));
+#endif
 #if defined(CUSTOM_IRRADIANCE_USED)
 	ambient_light = mix(ambient_light, custom_irradiance.rgb, custom_irradiance.a);
 #endif // CUSTOM_IRRADIANCE_USED
@@ -1934,7 +1956,7 @@ void main() {
 	} //Reflection probes
 
 	// finalize ambient light here
-	ambient_light *= ao;
+	ambient_light *= min(ao, screen_ao.r);
 #ifndef SPECULAR_OCCLUSION_DISABLED
 #ifdef BENT_NORMAL_MAP_USED
 	// Simplified bent normal occlusion.
@@ -1958,7 +1980,7 @@ void main() {
 #endif // !AMBIENT_LIGHT_DISABLED
 
 	// convert ao to direct light ao
-	ao = mix(half(1.0), ao, ao_light_affect);
+	ao = mix(half(1.0), ao, ao_light_affect) * screen_ao.g;
 
 	//this saves some VGPRs
 	hvec3 f0 = F0(metallic, specular, albedo);

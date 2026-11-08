@@ -57,6 +57,8 @@ public:
 	const PagedArray<RID> *decals = nullptr;
 	const PagedArray<RID> *lightmaps = nullptr;
 	const PagedArray<RID> *fog_volumes = nullptr;
+	RID ambient_occlusion_texture;
+	RID scenario;
 	RID environment;
 	RID camera_attributes;
 	RID compositor;

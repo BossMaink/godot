@@ -1,0 +1,9 @@
+Import("env")
+Import("env_modules")
+module_env = env_modules.Clone()
+module_env.add_source_files(env.modules_sources, "ambient_cube.cpp")
+module_env.add_source_files(env.modules_sources, "register_types.cpp")
+if env.get("vulkan", False) or env.get("d3d12", False) or env.get("metal", False):
+    module_env.RD_GLSL("mobile_ssao.glsl")
+    module_env.add_source_files(env.modules_sources, "ambient_lighting_rd.cpp")
+    module_env.Depends("#servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl.gen.h", "ambient_cube_inc.glsl")
