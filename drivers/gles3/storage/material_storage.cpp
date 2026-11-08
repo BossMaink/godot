@@ -1445,6 +1445,7 @@ MaterialStorage::MaterialStorage() {
 		actions.render_mode_defines["ambient_light_disabled"] = "#define AMBIENT_LIGHT_DISABLED\n";
 		actions.render_mode_defines["shadow_to_opacity"] = "#define USE_SHADOW_TO_OPACITY\n";
 		actions.render_mode_defines["unshaded"] = "#define MODE_UNSHADED\n";
+		actions.render_mode_defines["blend_mul"] = "#define BLEND_MUL\n";
 		if (!GLES3::Config::get_singleton()->force_vertex_shading) {
 			// If forcing vertex shading, this will be defined already.
 			actions.render_mode_defines["vertex_lighting"] = "#define USE_VERTEX_LIGHTING\n";
@@ -1603,6 +1604,9 @@ MaterialStorage::MaterialStorage() {
 		actions.renames["COLOR1"] = "color1";
 		actions.renames["COLOR2"] = "color2";
 		actions.renames["COLOR3"] = "color3";
+
+		actions.global_buffer_array_variable = "global_shader_uniforms";
+		actions.global_buffer_array_is_texture = true;
 
 		shaders.compiler_tex_blit.initialize(actions);
 	}
