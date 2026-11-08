@@ -9,13 +9,16 @@ from dataclasses import dataclass
 
 def find_dotnet_cli():
     if os.name == "nt":
-        for hint_dir in os.environ["PATH"].split(os.pathsep):
-            hint_dir = hint_dir.strip('"')
-            hint_path = os.path.join(hint_dir, "dotnet")
-            if os.path.isfile(hint_path) and os.access(hint_path, os.X_OK):
-                return hint_path
-            if os.path.isfile(hint_path + ".exe") and os.access(hint_path + ".exe", os.X_OK):
-                return hint_path + ".exe"
+        # This fork's Windows builds use the SDK shipped beside the engine.
+        # Do not silently pick an older system SDK from the caller's PATH.
+        dotnet_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../bin/dotnet10"))
+        dotnet_cli = os.path.join(dotnet_root, "dotnet.exe")
+        if not os.path.isfile(dotnet_cli):
+            raise FileNotFoundError(f"The engine-local .NET 10 SDK is required: {dotnet_cli}")
+        os.environ["DOTNET_ROOT"] = dotnet_root
+        os.environ["DOTNET_ROOT_X64"] = dotnet_root
+        os.environ["PATH"] = dotnet_root + os.pathsep + os.environ.get("PATH", "")
+        return dotnet_cli
     else:
         for hint_dir in os.environ["PATH"].split(os.pathsep):
             hint_dir = hint_dir.strip('"')

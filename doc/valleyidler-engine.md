@@ -10,6 +10,7 @@ This fork retains the project's transparent desktop presentation fixes while fol
 - Reserve a separate combined texture unit for GLES global parameters. Upstream's stage-local slot overlapped a 21-texture material and corrupted subsequent tree draws; the isolated 80-instance regression now passes.
 - Match the GLES particle material UBO binding to the upstream C++ binding enum after removal of the global UBO.
 - Use upstream translation generation and compilation unchanged; the local per-language compilation split has been removed.
+- Build Windows managed assemblies with the engine-local "bin/dotnet10/dotnet.exe", independent of the invoking terminal's SDK PATH. Propagate its root and PATH to build subprocesses; report a missing local SDK instead of choosing an older system installation. Non-Windows SDK discovery remains upstream.
 - Provide an opt-in Windows Vulkan-to-D3D11 shared GPU texture presentation path using DirectComposition. This path imports same-adapter D3D11 textures into Vulkan, synchronizes with keyed mutexes and copies on the GPU. It does not read pixels back to the CPU.
 - Reuse D3D11 backbuffer references and Vulkan submission arrays, and omit redundant per-frame Flush before Present.
 
