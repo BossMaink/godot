@@ -477,6 +477,7 @@ public:
 	ShaderData *shader_get_data(RID p_shader) const;
 
 	virtual RenderingServerTypes::ShaderNativeSourceCode shader_get_native_source_code(RID p_shader) const override;
+	virtual bool shader_prepare_for_rendering(RID p_shader) override;
 	virtual void shader_embedded_set_lock() override;
 	virtual const HashSet<RID> &shader_embedded_set_get() const override;
 	virtual void shader_embedded_set_unlock() override;

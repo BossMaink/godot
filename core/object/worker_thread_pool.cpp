@@ -497,7 +497,7 @@ void WorkerThreadPool::_wait_collaboratively(ThreadData *p_caller_pool_thread, T
 			bool was_signaled = p_caller_pool_thread->signaled;
 			p_caller_pool_thread->signaled = false;
 
-			bool exit = _handle_runlevel(p_caller_pool_thread, lock);
+			bool exit = _handle_runlevel(p_caller_pool_thread, lock, p_task == ThreadData::YIELDING && p_caller_pool_thread->current_task && p_caller_pool_thread->current_task->is_pump_task);
 			if (unlikely(exit)) {
 				break;
 			}
@@ -582,18 +582,23 @@ void WorkerThreadPool::_switch_runlevel(Runlevel p_runlevel) {
 }
 
 // Returns whether threads have to exit. This may perform the check about handling needed.
-bool WorkerThreadPool::_handle_runlevel(ThreadData *p_thread_data, MutexLock<BinaryMutex> &p_lock) {
+bool WorkerThreadPool::_handle_runlevel(ThreadData *p_thread_data, MutexLock<BinaryMutex> &p_lock, bool p_can_idle) {
 	bool exit = false;
 	switch (runlevel) {
 		case RUNLEVEL_NORMAL: {
 		} break;
 		case RUNLEVEL_PRE_EXIT_LANGUAGES: {
-			if (!p_thread_data->pre_exited_languages) {
-				if (!task_queue.first() && !low_priority_task_queue.first()) {
-					p_thread_data->pre_exited_languages = true;
+			// A thread counted as idle may receive tasks posted by another worker.
+			// Update both transitions while holding task_mutex, before dequeuing work.
+			bool idle = p_can_idle && !task_queue.first() && !low_priority_task_queue.first();
+			if (p_thread_data->pre_exited_languages != idle) {
+				p_thread_data->pre_exited_languages = idle;
+				if (idle) {
 					runlevel_data.pre_exit_languages.num_idle_threads++;
-					control_cond_var.notify_all();
+				} else {
+					runlevel_data.pre_exit_languages.num_idle_threads--;
 				}
+				control_cond_var.notify_all();
 			}
 		} break;
 		case RUNLEVEL_EXIT_LANGUAGES: {

@@ -1074,6 +1074,7 @@ public:
 	virtual Variant instance_geometry_get_shader_parameter_default_value(RID p_instance, const StringName &p_parameter) const;
 
 	virtual void mesh_generate_pipelines(RID p_mesh, bool p_background_compilation);
+	virtual bool mesh_prepare_material_for_rendering(RID p_mesh, RID p_material, bool p_instanced, int p_msaa_3d, int p_msaa_2d, bool p_hdr_2d) override { return scene_render->mesh_prepare_material_for_rendering(p_mesh, p_material, p_instanced, p_msaa_3d, p_msaa_2d, p_hdr_2d); }
 	virtual uint32_t get_pipeline_compilations(RSE::PipelineSource p_source);
 
 	_FORCE_INLINE_ void _update_instance(Instance *p_instance) const;

@@ -320,6 +320,21 @@ public:
 
 	FUNC1RC(RenderingServerTypes::ShaderNativeSourceCode, shader_get_native_source_code, RID)
 
+	virtual bool shader_prepare_for_rendering(RID p_shader) override {
+		// Never enqueue a blocking compilation onto the render thread.
+		ERR_FAIL_COND_V(Thread::is_main_thread() || Thread::get_caller_id() == server_thread, false);
+		if (!RSG::rasterizer->can_create_resources_async()) {
+			return false;
+		}
+		return RSG::material_storage->shader_prepare_for_rendering(p_shader);
+	}
+
+	virtual bool mesh_prepare_material_for_rendering(RID p_mesh, RID p_material, bool p_instanced = false, int p_msaa_3d = -1, int p_msaa_2d = -1, bool p_hdr_2d = false) override {
+		ERR_FAIL_COND_V_MSG(Thread::is_main_thread() || Thread::get_caller_id() == server_thread, false, "Material pipeline preparation must run on an engine worker.");
+		ERR_FAIL_COND_V_MSG(!RSG::rasterizer->can_create_resources_async(), false, "The active renderer cannot prepare pipelines asynchronously.");
+		return RSG::scene->mesh_prepare_material_for_rendering(p_mesh, p_material, p_instanced, p_msaa_3d, p_msaa_2d, p_hdr_2d);
+	}
+
 	/* COMMON MATERIAL API */
 
 	FUNCRIDSPLIT(material)

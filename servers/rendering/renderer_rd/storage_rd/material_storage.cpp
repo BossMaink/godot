@@ -2415,6 +2415,17 @@ RenderingServerTypes::ShaderNativeSourceCode MaterialStorage::shader_get_native_
 	return RenderingServerTypes::ShaderNativeSourceCode();
 }
 
+bool MaterialStorage::shader_prepare_for_rendering(RID p_shader) {
+	Shader *shader = shader_owner.get_or_null(p_shader);
+	ERR_FAIL_NULL_V(shader, false);
+	if (!shader->data) {
+		return false;
+	}
+	// The caller retains this shader and must not mutate or publish it until this returns.
+	Pair<ShaderRD *, RID> native = shader->data->get_native_shader_and_version();
+	return native.first && native.second.is_valid() && native.first->version_is_valid(native.second);
+}
+
 void MaterialStorage::shader_embedded_set_lock() {
 	embedded_set_mutex.lock();
 }

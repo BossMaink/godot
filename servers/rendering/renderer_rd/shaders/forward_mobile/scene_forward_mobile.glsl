@@ -1030,6 +1030,7 @@ layout(location = 0) out vec4 frag_color;
 #define SPECULAR_SCHLICK_GGX
 #endif
 
+#define MOBILE_PCF_PAIRED_TAPS
 #include "../scene_forward_lights_inc.glsl"
 
 #endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(USE_VERTEX_LIGHTING)

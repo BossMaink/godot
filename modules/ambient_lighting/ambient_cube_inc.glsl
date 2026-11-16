@@ -30,9 +30,11 @@ vec3 ambient_cube_evaluate(vec3 fallback, vec3 world_position, vec3 world_normal
 		vec3 t = clamp((local_position - ambient_cube.volumes[i].sampling_minimum.xyz) / ambient_cube.volumes[i].sampling_size.xyz, 0.0, 1.0);
 		vec3 n = normalize(mat3(ambient_cube.volumes[i].world_to_local) * world_normal);
 		vec3 w = n * n, e = vec3(0.0);
-		for (int d = 0; d < 6; d++) {
-			int a = d / 2;
-			float weight = ((n[a] >= 0.0) == ((d % 2) == 0)) ? w[a] : 0.0;
+		// Only one direction on each axis has nonzero squared-normal weight.
+		// Keep X/Y/Z accumulation order and the original eight-corner interpolation.
+		for (int a = 0; a < 3; a++) {
+			int d = a * 2 + (n[a] >= 0.0 ? 0 : 1);
+			float weight = w[a];
 			vec3 c0 = mix(ambient_cube.volumes[i].coefficients[d].rgb, ambient_cube.volumes[i].coefficients[6 + d].rgb, t.x);
 			vec3 c1 = mix(ambient_cube.volumes[i].coefficients[12 + d].rgb, ambient_cube.volumes[i].coefficients[18 + d].rgb, t.x);
 			vec3 c2 = mix(ambient_cube.volumes[i].coefficients[24 + d].rgb, ambient_cube.volumes[i].coefficients[30 + d].rgb, t.x);

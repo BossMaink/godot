@@ -177,6 +177,8 @@ public:
 	virtual RID shader_get_default_texture_parameter(RID p_shader, const StringName &p_name, int p_index = 0) const = 0;
 
 	virtual RenderingServerTypes::ShaderNativeSourceCode shader_get_native_source_code(RID p_shader) const = 0;
+	virtual bool shader_prepare_for_rendering(RID p_shader) = 0;
+	virtual bool mesh_prepare_material_for_rendering(RID p_mesh, RID p_material, bool p_instanced = false, int p_msaa_3d = -1, int p_msaa_2d = -1, bool p_hdr_2d = false) = 0;
 
 	/* COMMON MATERIAL API */
 

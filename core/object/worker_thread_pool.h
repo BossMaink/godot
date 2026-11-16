@@ -220,7 +220,7 @@ private:
 	void _wait_collaboratively(ThreadData *p_caller_pool_thread, Task *p_task);
 
 	void _switch_runlevel(Runlevel p_runlevel);
-	bool _handle_runlevel(ThreadData *p_thread_data, MutexLock<BinaryMutex> &p_lock);
+	bool _handle_runlevel(ThreadData *p_thread_data, MutexLock<BinaryMutex> &p_lock, bool p_can_idle = true);
 
 #ifdef THREADS_ENABLED
 	static uint32_t _thread_enter_unlock_allowance_zone(THREADING_NAMESPACE::unique_lock<THREADING_NAMESPACE::mutex> &p_ulock);

@@ -70,6 +70,7 @@ public:
 	virtual Variant shader_get_parameter_default(RID p_material, const StringName &p_param) const = 0;
 
 	virtual RenderingServerTypes::ShaderNativeSourceCode shader_get_native_source_code(RID p_shader) const = 0;
+	virtual bool shader_prepare_for_rendering(RID p_shader) { return false; }
 	virtual void shader_embedded_set_lock() = 0;
 	virtual const HashSet<RID> &shader_embedded_set_get() const = 0;
 	virtual void shader_embedded_set_unlock() = 0;

@@ -328,10 +328,31 @@ half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec
 
 	float avg = 0.0;
 
+#ifdef MOBILE_PCF_PAIRED_TAPS
+	// Issue independent taps before consuming them; keep the original sum order.
+	// Two independent pairs; the original accumulation order remains unchanged.
+	SPEC_CONSTANT_LOOP_ANNOTATION
+	for (uint pair_index = 0u; pair_index < sc_directional_soft_shadow_samples() / 4u; pair_index++) {
+		uint tap = pair_index * 4u;
+		float first = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.directional_soft_shadow_kernel[tap].xy), depth, 1.0));
+		float second = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.directional_soft_shadow_kernel[tap + 1u].xy), depth, 1.0));
+		float third = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.directional_soft_shadow_kernel[tap + 2u].xy), depth, 1.0));
+		float fourth = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.directional_soft_shadow_kernel[tap + 3u].xy), depth, 1.0));
+		avg += first;
+		avg += second;
+		avg += third;
+		avg += fourth;
+	}
+	SPEC_CONSTANT_LOOP_ANNOTATION
+	for (uint remainder = (sc_directional_soft_shadow_samples() / 4u) * 4u; remainder < sc_directional_soft_shadow_samples(); remainder++) {
+		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.directional_soft_shadow_kernel[remainder].xy), depth, 1.0));
+	}
+#else
 	SPEC_CONSTANT_LOOP_ANNOTATION
 	for (uint i = 0; i < sc_directional_soft_shadow_samples(); i++) {
 		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.directional_soft_shadow_kernel[i].xy), depth, 1.0));
 	}
+#endif
 
 	return half(avg * (1.0 / float(sc_directional_soft_shadow_samples())));
 }
@@ -355,13 +376,61 @@ half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, flo
 
 	float avg = 0.0;
 
+#ifdef MOBILE_PCF_PAIRED_TAPS
+	// Issue independent taps before consuming them; keep the original sum order.
+	// Two independent pairs; the original accumulation order remains unchanged.
+	SPEC_CONSTANT_LOOP_ANNOTATION
+	for (uint pair_index = 0u; pair_index < sc_soft_shadow_samples() / 4u; pair_index++) {
+		uint tap = pair_index * 4u;
+		float first = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[tap].xy), depth, 1.0));
+		float second = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[tap + 1u].xy), depth, 1.0));
+		float third = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[tap + 2u].xy), depth, 1.0));
+		float fourth = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[tap + 3u].xy), depth, 1.0));
+		avg += first;
+		avg += second;
+		avg += third;
+		avg += fourth;
+	}
+	SPEC_CONSTANT_LOOP_ANNOTATION
+	for (uint remainder = (sc_soft_shadow_samples() / 4u) * 4u; remainder < sc_soft_shadow_samples(); remainder++) {
+		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[remainder].xy), depth, 1.0));
+	}
+#else
 	SPEC_CONSTANT_LOOP_ANNOTATION
 	for (uint i = 0; i < sc_soft_shadow_samples(); i++) {
 		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[i].xy), depth, 1.0));
 	}
+#endif
 
 	return half(avg * (1.0 / float(sc_soft_shadow_samples())));
 }
+
+#ifdef MOBILE_PCF_PAIRED_TAPS
+vec2 mobile_omni_pcf_uv(vec2 coord, vec2 offset_scale, mat2 disk_rotation, vec2 kernel, vec4 uv_rect, vec2 flip_offset, bool interior_disk) {
+	vec2 offset = offset_scale * (disk_rotation * kernel);
+	vec2 sample_coord = coord + offset;
+
+	bool do_flip = false;
+	if (!interior_disk) {
+	float sample_coord_length_squared = dot(sample_coord, sample_coord);
+	do_flip = sample_coord_length_squared > 1.0;
+
+	if (do_flip) {
+		float len = sqrt(sample_coord_length_squared);
+		sample_coord = sample_coord * (2.0 / len - 1.0);
+	}
+
+	}
+
+	sample_coord = sample_coord * 0.5 + 0.5;
+	sample_coord = uv_rect.xy + sample_coord * uv_rect.zw;
+
+	if (do_flip) {
+		sample_coord += flip_offset;
+	}
+	return sample_coord;
+}
+#endif
 
 half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4 uv_rect, vec2 flip_offset, float depth, float taa_frame_count) {
 	//if only one sample is taken, take it from the center
@@ -381,7 +450,32 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 
 	float avg = 0.0;
 	vec2 offset_scale = blur_scale * 2.0 * scene_data_block.data.shadow_atlas_pixel_size / uv_rect.zw;
+	// Vogel disk kernels have radius < 1. Rotation is unit length. Four times
+	// the largest axis scale plus a rounding margin conservatively bounds all
+	// offsets, so central samples cannot cross the dual-paraboloid seam.
+	float interior_radius = max(1.0 - 4.0 * max(abs(offset_scale.x), abs(offset_scale.y)) - 0.0001, 0.0);
+	bool interior_disk = dot(coord, coord) < interior_radius * interior_radius;
 
+
+#ifdef MOBILE_PCF_PAIRED_TAPS
+	// Two independent pairs; the original accumulation order remains unchanged.
+	SPEC_CONSTANT_LOOP_ANNOTATION
+	for (uint pair_index = 0u; pair_index < sc_soft_shadow_samples() / 4u; pair_index++) {
+		uint tap = pair_index * 4u;
+		float first = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(mobile_omni_pcf_uv(coord, offset_scale, disk_rotation, scene_data_block.data.soft_shadow_kernel[tap].xy, uv_rect, flip_offset, interior_disk), depth, 1.0));
+		float second = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(mobile_omni_pcf_uv(coord, offset_scale, disk_rotation, scene_data_block.data.soft_shadow_kernel[tap + 1u].xy, uv_rect, flip_offset, interior_disk), depth, 1.0));
+		float third = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(mobile_omni_pcf_uv(coord, offset_scale, disk_rotation, scene_data_block.data.soft_shadow_kernel[tap + 2u].xy, uv_rect, flip_offset, interior_disk), depth, 1.0));
+		float fourth = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(mobile_omni_pcf_uv(coord, offset_scale, disk_rotation, scene_data_block.data.soft_shadow_kernel[tap + 3u].xy, uv_rect, flip_offset, interior_disk), depth, 1.0));
+		avg += first;
+		avg += second;
+		avg += third;
+		avg += fourth;
+	}
+	SPEC_CONSTANT_LOOP_ANNOTATION
+	for (uint remainder = (sc_soft_shadow_samples() / 4u) * 4u; remainder < sc_soft_shadow_samples(); remainder++) {
+		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(mobile_omni_pcf_uv(coord, offset_scale, disk_rotation, scene_data_block.data.soft_shadow_kernel[remainder].xy, uv_rect, flip_offset, interior_disk), depth, 1.0));
+	}
+#else
 	SPEC_CONSTANT_LOOP_ANNOTATION
 	for (uint i = 0; i < sc_soft_shadow_samples(); i++) {
 		vec2 offset = offset_scale * (disk_rotation * scene_data_block.data.soft_shadow_kernel[i].xy);
@@ -403,6 +497,7 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 		}
 		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(sample_coord, depth, 1.0));
 	}
+#endif
 
 	return half(avg * (1.0 / float(sc_soft_shadow_samples())));
 }

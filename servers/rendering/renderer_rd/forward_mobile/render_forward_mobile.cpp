@@ -381,20 +381,46 @@ void RenderForwardMobile::setup_render_buffer_data(Ref<RenderSceneBuffersRD> p_r
 }
 
 void RenderForwardMobile::mesh_generate_pipelines(RID p_mesh, bool p_background_compilation) {
+	_mesh_generate_material_pipelines(p_mesh, p_background_compilation, RID(), false, -1, -1, false);
+}
+
+bool RenderForwardMobile::mesh_prepare_material_for_rendering(RID p_mesh, RID p_material, bool p_instanced, int p_msaa_3d, int p_msaa_2d, bool p_hdr_2d) {
+	ERR_FAIL_COND_V(p_material.is_null(), false);
+	ERR_FAIL_COND_V(p_msaa_3d < -1 || p_msaa_3d >= RSE::VIEWPORT_MSAA_MAX || p_msaa_2d < -1 || p_msaa_2d >= RSE::VIEWPORT_MSAA_MAX, false);
+	return _mesh_generate_material_pipelines(p_mesh, false, p_material, p_instanced, p_msaa_3d, p_msaa_2d, p_hdr_2d);
+}
+
+bool RenderForwardMobile::_mesh_generate_material_pipelines(RID p_mesh, bool p_background_compilation, RID p_override_material, bool p_instanced, int p_msaa_3d, int p_msaa_2d, bool p_hdr_2d) {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);
 	uint32_t surface_count = 0;
 	const RID *materials = mesh_storage->mesh_get_surface_count_and_materials(p_mesh, surface_count);
 	Vector<ShaderPipelinePair> pipeline_pairs;
+	uint32_t prepared_surfaces = 0;
+	GlobalPipelineData pipeline_data = global_pipeline_data_required;
+	if (p_override_material.is_valid() && p_msaa_3d >= 0) {
+		// Prepare the caller's actual target rather than whichever viewport
+		// most recently supplied the global sample settings. Both existing
+		// post-pass arrangements may be selected once material flags are culled.
+		pipeline_data.texture_samples = RenderSceneBuffersRD::msaa_to_samples(RSE::ViewportMSAA(p_msaa_3d));
+		if (p_msaa_2d >= 0) {
+			pipeline_data.target_samples = RenderSceneBuffersRD::msaa_to_samples(RSE::ViewportMSAA(p_msaa_2d));
+		}
+		pipeline_data.use_subpass_post_pass = true;
+		pipeline_data.use_separate_post_pass = true;
+		pipeline_data.use_hdr_render_target = p_hdr_2d;
+		pipeline_data.use_ldr_render_target = !p_hdr_2d;
+	}
 	for (uint32_t i = 0; i < surface_count; i++) {
-		if (materials[i].is_null()) {
+		RID surface_material = p_override_material.is_valid() ? p_override_material : materials[i];
+		if (surface_material.is_null()) {
 			continue;
 		}
 
 		void *mesh_surface = mesh_storage->mesh_get_surface(p_mesh, i);
 		void *mesh_surface_shadow = mesh_surface;
-		SceneShaderForwardMobile::MaterialData *material = static_cast<SceneShaderForwardMobile::MaterialData *>(material_storage->material_get_data(materials[i], RendererRD::MaterialStorage::SHADER_TYPE_3D));
+		SceneShaderForwardMobile::MaterialData *material = static_cast<SceneShaderForwardMobile::MaterialData *>(material_storage->material_get_data(surface_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		if (material == nullptr || !material->shader_data->is_valid()) {
 			continue;
 		}
@@ -420,12 +446,13 @@ void RenderForwardMobile::mesh_generate_pipelines(RID p_mesh, bool p_background_
 		surface.mesh_surface_shadow = mesh_surface_shadow;
 		surface.shader = shader;
 		surface.shader_shadow = shader_shadow;
-		surface.instanced = mesh_storage->mesh_needs_instance(p_mesh, true);
+		surface.instanced = p_instanced || mesh_storage->mesh_needs_instance(p_mesh, true);
 		surface.uses_opaque = !material->shader_data->uses_alpha_pass();
 		surface.uses_transparent = material->shader_data->uses_alpha_pass();
 		surface.uses_depth = surface.uses_opaque || (surface.uses_transparent && material->shader_data->uses_depth_in_alpha_pass());
 		surface.can_use_lightmap = mesh_storage->mesh_surface_get_format(mesh_surface) & RSE::ARRAY_FORMAT_TEX_UV2;
-		_mesh_compile_pipelines_for_surface(surface, global_pipeline_data_required, RSE::PIPELINE_SOURCE_MESH, &pipeline_pairs);
+		_mesh_compile_pipelines_for_surface(surface, pipeline_data, RSE::PIPELINE_SOURCE_MESH, &pipeline_pairs);
+		prepared_surfaces++;
 	}
 
 	// Try to wait for all the pipelines that were compiled. This will force the loader to wait on all ubershader pipelines to be ready.
@@ -434,6 +461,7 @@ void RenderForwardMobile::mesh_generate_pipelines(RID p_mesh, bool p_background_
 			pair.first->pipeline_hash_map.wait_for_pipeline(pair.second.hash());
 		}
 	}
+	return prepared_surfaces == surface_count && surface_count > 0;
 }
 
 uint32_t RenderForwardMobile::get_pipeline_compilations(RSE::PipelineSource p_source) {
@@ -1307,6 +1335,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			RENDER_TIMESTAMP("Mobile SSAO");
 			p_render_data->ambient_occlusion_texture = ambient_lighting->render_occlusion(p_render_data, occlusion);
 			base_specialization.mobile_ambient_occlusion = p_render_data->ambient_occlusion_texture.is_valid();
+			RENDER_TIMESTAMP("Render Opaque After SSAO");
 		}
 #endif
 		RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, p_render_data, is_multiview, radiance_texture, samplers, true);

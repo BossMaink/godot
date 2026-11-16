@@ -1592,8 +1592,8 @@ void ResourceLoader::clear_thread_load_tasks() {
 	// Bring the thing down as quickly as possible without causing deadlocks or leaks.
 
 	MutexLock thread_load_lock(thread_load_mutex);
-	cleaning_tasks = true;
-
+	// Finish dependencies while loaders and servers are still alive. Setting
+	// cleaning_tasks here turns valid dependencies into parse failures.
 	while (true) {
 		bool none_running = true;
 		for (int tid : yielders) {
@@ -1602,10 +1602,6 @@ void ResourceLoader::clear_thread_load_tasks() {
 		if (thread_load_tasks.size()) {
 			for (KeyValue<String, ResourceLoader::ThreadLoadTask> &E : thread_load_tasks) {
 				if (E.value.status == THREAD_LOAD_IN_PROGRESS) {
-					if (E.value.cond_var && E.value.need_wait) {
-						E.value.cond_var->notify_all();
-					}
-					E.value.need_wait = false;
 					none_running = false;
 				}
 			}
@@ -1620,11 +1616,14 @@ void ResourceLoader::clear_thread_load_tasks() {
 			MessageQueue::get_singleton()->flush();
 		}
 
+		// Single-threaded rendering may own commands awaited by a loader.
+		_ensure_load_progress();
 		OS::get_singleton()->delay_usec(1000);
 
 		thread_load_lock.temp_relock();
 	}
 
+	cleaning_tasks = true;
 	while (user_load_tokens.begin()) {
 		LoadToken *user_token = user_load_tokens.begin()->value;
 		user_load_tokens.remove(user_load_tokens.begin());

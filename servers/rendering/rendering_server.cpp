@@ -2331,6 +2331,8 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("shader_get_code", "shader"), &RenderingServer::shader_get_code);
 	ClassDB::bind_method(D_METHOD("get_shader_parameter_list", "shader"), &RenderingServer::_shader_get_shader_parameter_list);
 	ClassDB::bind_method(D_METHOD("shader_get_parameter_default", "shader", "name"), &RenderingServer::shader_get_parameter_default);
+	ClassDB::bind_method(D_METHOD("shader_prepare_for_rendering", "shader"), &RenderingServer::shader_prepare_for_rendering);
+	ClassDB::bind_method(D_METHOD("mesh_prepare_material_for_rendering", "mesh", "material", "instanced", "msaa_3d", "msaa_2d", "hdr_2d"), &RenderingServer::mesh_prepare_material_for_rendering, DEFVAL(false), DEFVAL(-1), DEFVAL(-1), DEFVAL(false));
 
 	ClassDB::bind_method(D_METHOD("shader_set_default_texture_parameter", "shader", "name", "texture", "index"), &RenderingServer::shader_set_default_texture_parameter, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("shader_get_default_texture_parameter", "shader", "name", "index"), &RenderingServer::shader_get_default_texture_parameter, DEFVAL(0));

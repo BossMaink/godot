@@ -129,6 +129,7 @@ public:
 	/* PIPELINES */
 
 	virtual void mesh_generate_pipelines(RID p_mesh, bool p_background_compilation) = 0;
+	virtual bool mesh_prepare_material_for_rendering(RID p_mesh, RID p_material, bool p_instanced, int p_msaa_3d, int p_msaa_2d, bool p_hdr_2d) { return false; }
 	virtual uint32_t get_pipeline_compilations(RSE::PipelineSource p_source) = 0;
 
 	/* SKY API */
