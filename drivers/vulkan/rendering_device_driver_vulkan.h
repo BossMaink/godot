@@ -43,6 +43,7 @@
 #endif
 #endif
 #include <thirdparty/re-spirv/re-spirv.h>
+#include "respirv_shared_program.h"
 #include <thirdparty/vulkan/vk_mem_alloc.h>
 
 #include <drivers/vulkan/godot_vulkan.h>
@@ -489,12 +490,13 @@ public:
 	/**** SHADER ****/
 	/****************/
 private:
+	ExactProgramPool<RespirvSharedProgram> respv_programs;
 	struct ShaderInfo {
 		String name;
 		VkShaderStageFlags vk_push_constant_stages = 0;
 		TightLocalVector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
 		TightLocalVector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
-		TightLocalVector<respv::Shader> respv_stage_shaders;
+		TightLocalVector<std::shared_ptr<const RespirvSharedProgram>> respv_stage_shaders;
 		TightLocalVector<Vector<uint8_t>> spirv_stage_bytes;
 		TightLocalVector<uint64_t> original_stage_size;
 		VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;

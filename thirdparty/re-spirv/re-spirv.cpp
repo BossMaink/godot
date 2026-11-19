@@ -5,7 +5,7 @@
 // Licensed under the MIT license. See LICENSE file for details.
 //
 
-#include "re-spirv.h"
+#include "narrow-optimizer-inputs.h"
 
 #include <algorithm>
 #include <cassert>
@@ -2399,18 +2399,90 @@ namespace respv {
         }
     }
 
-    static bool optimizerPrepareData(OptimizerContext &rContext) {
+    template <typename Narrow>
+    static std::unique_ptr<Narrow[]> narrowDegrees(std::vector<uint32_t> &source) {
+        if (source.empty() || *std::max_element(source.begin(), source.end()) > Narrow(-1)) {
+            return {};
+        }
+
+        std::unique_ptr<Narrow[]> result(new Narrow[source.size()]);
+        std::copy(source.begin(), source.end(), result.get());
+        std::vector<uint32_t>().swap(source);
+        return result;
+    }
+
+    NarrowOptimizerInputs::NarrowOptimizerInputs(Shader &shader) :
+        inDegrees(narrowDegrees<uint8_t>(shader.instructionInDegrees)),
+        outDegrees(narrowDegrees<uint16_t>(shader.instructionOutDegrees)) {
+        // Store "absent" as zero. Other indices are encoded as index + 1,
+        // so expansion can restore the original UINT32_MAX using subtraction.
+        auto fits = [](uint32_t i) { return i + 1U <= UINT16_MAX; };
+        if (shader.listNodes.empty() || !std::all_of(shader.listNodes.begin(), shader.listNodes.end(),
+                [&](const ListNode &node) { return fits(node.instructionIndex) && fits(node.nextListIndex); })) {
+            return;
+        }
+
+        listNodeCount = shader.listNodes.size();
+        listNodes.reset(new NarrowListNode[listNodeCount]);
+        for (size_t i = 0; i < listNodeCount; ++i) {
+            const ListNode &node = shader.listNodes[i];
+            listNodes[i] = { uint16_t(node.instructionIndex + 1U), uint16_t(node.nextListIndex + 1U) };
+        }
+        std::vector<ListNode>().swap(shader.listNodes);
+    }
+
+    template <typename T>
+    static void copyOptimizerVector(std::vector<T> &dest, const std::vector<T> &source) {
+        dest.resize(source.size());
+        if (!source.empty()) {
+            memcpy(dest.data(), source.data(), source.size() * sizeof(T));
+        }
+    }
+
+    template <typename Narrow>
+    static void copyDegrees(std::vector<uint32_t> &dest, const std::vector<uint32_t> &wide,
+                            const Narrow *narrow, size_t count) {
+        if (narrow) {
+            dest.resize(count);
+            std::copy_n(narrow, count, dest.data());
+        } else {
+            copyOptimizerVector(dest, wide);
+        }
+    }
+
+    void NarrowOptimizerInputs::copy_to(const Shader &shader, std::vector<uint32_t> &in,
+            std::vector<uint32_t> &out, std::vector<ListNode> &nodes) const {
+        copyDegrees(in, shader.instructionInDegrees, inDegrees.get(), shader.instructions.size());
+        copyDegrees(out, shader.instructionOutDegrees, outDegrees.get(), shader.instructions.size());
+        if (listNodes) {
+            nodes.resize(listNodeCount);
+            for (size_t i = 0; i < listNodeCount; ++i) {
+                nodes[i].instructionIndex = uint32_t(listNodes[i].instructionIndex) - 1U;
+                nodes[i].nextListIndex = uint32_t(listNodes[i].nextListIndex) - 1U;
+            }
+        } else {
+            copyOptimizerVector(nodes, shader.listNodes);
+        }
+    }
+
+    size_t NarrowOptimizerInputs::payload_capacity_bytes(const Shader &shader) const {
+        return shader.instructions.size() * (inDegrees ? sizeof(uint8_t) : 0) +
+                shader.instructions.size() * (outDegrees ? sizeof(uint16_t) : 0) +
+                listNodeCount * sizeof(NarrowListNode);
+    }
+
+    static bool optimizerPrepareData(OptimizerContext &rContext, const NarrowOptimizerInputs *inputs) {
         OptimizerContext &c = rContext;
         c.resolutions.clear();
         c.resolutions.resize(c.shader.results.size(), Resolution());
-        c.instructionAdjacentListIndices.resize(c.shader.instructionAdjacentListIndices.size());
-        c.instructionInDegrees.resize(c.shader.instructionInDegrees.size());
-        c.instructionOutDegrees.resize(c.shader.instructionOutDegrees.size());
-        c.listNodes.resize(c.shader.listNodes.size());
-        memcpy(c.instructionAdjacentListIndices.data(), c.shader.instructionAdjacentListIndices.data(), sizeof(uint32_t) * c.shader.instructionAdjacentListIndices.size());
-        memcpy(c.instructionInDegrees.data(), c.shader.instructionInDegrees.data(), sizeof(uint32_t) * c.shader.instructionInDegrees.size());
-        memcpy(c.instructionOutDegrees.data(), c.shader.instructionOutDegrees.data(), sizeof(uint32_t) * c.shader.instructionOutDegrees.size());
-        memcpy(c.listNodes.data(), c.shader.listNodes.data(), sizeof(ListNode) * c.shader.listNodes.size());
+        copyOptimizerVector(c.instructionAdjacentListIndices, c.shader.instructionAdjacentListIndices);
+        if (inputs) {
+            inputs->copy_to(c.shader, c.instructionInDegrees, c.instructionOutDegrees, c.listNodes);
+        } else {
+            copyOptimizerVector(c.instructionInDegrees, c.shader.instructionInDegrees);
+            copyOptimizerVector(c.instructionOutDegrees, c.shader.instructionOutDegrees);
+            copyOptimizerVector(c.listNodes, c.shader.listNodes);
+        }
 
         if (c.shader.inlinedSpirvWords.empty()) {
             c.optimizedData.resize(c.shader.extSpirvWordCount * sizeof(uint32_t));
@@ -3353,14 +3425,16 @@ namespace respv {
         return true;
     }
 
-    bool Optimizer::run(const Shader &pShader, const SpecConstant *pNewSpecConstants, uint32_t pNewSpecConstantCount, std::vector<uint8_t> &pOptimizedData, Options pOptions) {
+    static bool optimize(const Shader &pShader, const NarrowOptimizerInputs *inputs,
+            const SpecConstant *pNewSpecConstants, uint32_t pNewSpecConstantCount,
+            std::vector<uint8_t> &pOptimizedData, Options pOptions) {
         thread_local std::vector<uint32_t> instructionAdjacentListIndices;
         thread_local std::vector<uint32_t> instructionInDegrees;
         thread_local std::vector<uint32_t> instructionOutDegrees;
         thread_local std::vector<ListNode> listNodes;
         thread_local std::vector<Resolution> resolutions;
         OptimizerContext context = { pShader, instructionAdjacentListIndices, instructionInDegrees, instructionOutDegrees, listNodes, resolutions, pOptimizedData, pOptions };
-        if (!optimizerPrepareData(context)) {
+        if (!optimizerPrepareData(context, inputs)) {
             return false;
         }
 
@@ -3393,5 +3467,14 @@ namespace respv {
         }
 
         return true;
+    }
+    bool Optimizer::run(const Shader &shader, const SpecConstant *constants, uint32_t count,
+            std::vector<uint8_t> &data, Options options) {
+        return optimize(shader, nullptr, constants, count, data, options);
+    }
+
+    bool optimize_narrow(const Shader &shader, const NarrowOptimizerInputs &inputs,
+            const SpecConstant *constants, uint32_t count, std::vector<uint8_t> &data, Options options) {
+        return optimize(shader, &inputs, constants, count, data, options);
     }
     }; //namespace respv

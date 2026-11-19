@@ -4652,16 +4652,31 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 
 		if (use_respv) {
 			const bool inline_data = store_respv || (RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS == 0);
-			respv::Shader respv_shader(decoded_spirv.ptr(), decoded_spirv.size(), inline_data);
+			std::shared_ptr<const RespirvSharedProgram> shared_respv;
+			std::optional<respv::Shader> local_respv;
+			if (store_respv) {
+				// A fast bucket is never an equality decision. Compare all encoded
+				// bytes and decoding metadata before sharing immutable inline=true data.
+				shared_respv = respv_programs.acquire(RespirvSharedProgram::bucket(shader.code_compressed_bytes.ptr(), shader.code_compressed_bytes.size()), [&]() {
+					auto source_owner = std::make_shared<const Vector<uint8_t>>(shader.code_compressed_bytes);
+					return new RespirvSharedProgram(decoded_spirv.ptr(), decoded_spirv.size(), source_owner,
+						source_owner->ptr(), source_owner->size(), shader.code_compression_flags, shader.code_decompressed_size);
+				}, [&](const RespirvSharedProgram &program) {
+					return program.matches(shader.code_compressed_bytes.ptr(), shader.code_compressed_bytes.size(), shader.code_compression_flags, shader.code_decompressed_size);
+				});
+			} else {
+				local_respv.emplace(decoded_spirv.ptr(), decoded_spirv.size(), inline_data);
+			}
+			const respv::Shader &respv_shader = store_respv ? shared_respv->shader : *local_respv;
 			if (respv_shader.empty()) {
 #if RESPV_VERBOSE
 				print_line("re-spirv failed to parse the shader, skipping optimization.");
 #endif
 				if (store_respv) {
-					shader_info.respv_stage_shaders.push_back(respv::Shader());
+					shader_info.respv_stage_shaders.push_back(nullptr);
 				}
 			} else if (store_respv) {
-				shader_info.respv_stage_shaders.push_back(respv_shader);
+				shader_info.respv_stage_shaders.push_back(shared_respv);
 			} else {
 				std::vector<uint8_t> respv_optimized_data;
 				if (respv::Optimizer::run(respv_shader, nullptr, 0, respv_optimized_data)) {
@@ -6420,7 +6435,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 
 		if (p_specialization_constants.size()) {
 			bool use_pipeline_spec_constants = true;
-			if ((i < shader_info->respv_stage_shaders.size()) && !shader_info->respv_stage_shaders[i].empty()) {
+			if ((i < shader_info->respv_stage_shaders.size()) && shader_info->respv_stage_shaders[i] && !shader_info->respv_stage_shaders[i]->shader.empty()) {
 #if RECORD_PIPELINE_STATISTICS
 				uint64_t respv_start_time = OS::get_singleton()->get_ticks_usec();
 #endif
@@ -6436,7 +6451,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 #if RESPV_DONT_REMOVE_DEAD_CODE
 				respv_options.removeDeadCode = false;
 #endif
-				if (respv::Optimizer::run(shader_info->respv_stage_shaders[i], respv_spec_constants.ptr(), respv_spec_constants.size(), respv_optimized_data, respv_options)) {
+				if (respv::optimize_narrow(shader_info->respv_stage_shaders[i]->shader, shader_info->respv_stage_shaders[i]->optimizer_inputs, respv_spec_constants.ptr(), respv_spec_constants.size(), respv_optimized_data, respv_options)) {
 #if RESPV_VERBOSE
 					String spec_constants;
 					for (uint32_t j = 0; j < p_specialization_constants.size(); j++) {
@@ -6446,7 +6461,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 						}
 					}
 
-					print_line(vformat("re-spirv transformed the shader from %d bytes to %d bytes with constants %s (%d).", shader_info->respv_stage_shaders[i].inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
+					print_line(vformat("re-spirv transformed the shader from %d bytes to %d bytes with constants %s (%d).", shader_info->respv_stage_shaders[i]->shader.inlinedSpirvWords.size() * sizeof(uint32_t), respv_optimized_data.size(), spec_constants, p_shader.id));
 #endif
 
 					// Create the shader module with the optimized output.
