@@ -62,7 +62,9 @@ struct Win32Heap {
 	}
 
 	~Win32Heap() {
-		HeapDestroy(handle);
+		if (handle != nullptr) {
+			HeapDestroy(handle);
+		}
 	}
 };
 
@@ -71,6 +73,10 @@ constexpr size_t ALLOC_HEADER_SIZE = sizeof(Win32Heap *) * 2;
 
 extern "C" {
 void *godot_nir_malloc(size_t p_size) {
+	if (p_size > SIZE_MAX - ALLOC_HEADER_SIZE) {
+		return nullptr;
+	}
+
 	// This RAII helper is for allowing the heap to be destroyed when the thread quits.
 	struct Win32HeapHolder {
 		Win32Heap *win32_heap = nullptr;
@@ -87,8 +93,14 @@ void *godot_nir_malloc(size_t p_size) {
 	};
 
 	thread_local Win32HeapHolder holder;
+	if (holder.win32_heap == nullptr || holder.win32_heap->handle == nullptr) {
+		return nullptr;
+	}
 
 	void *block = HeapAlloc(holder.win32_heap->handle, 0, p_size + ALLOC_HEADER_SIZE);
+	if (block == nullptr) {
+		return nullptr;
+	}
 
 	// Store the heap in the allocation for the realloc/free operations.
 	*(Win32Heap **)block = holder.win32_heap;
@@ -98,9 +110,18 @@ void *godot_nir_malloc(size_t p_size) {
 }
 
 void *godot_nir_realloc(void *p_block, size_t p_size) {
+	if (p_block == nullptr) {
+		return godot_nir_malloc(p_size);
+	}
+	if (p_size > SIZE_MAX - ALLOC_HEADER_SIZE) {
+		return nullptr;
+	}
+
 	uint8_t *actual_block = (uint8_t *)p_block - ALLOC_HEADER_SIZE;
 	Win32Heap *win32_heap = *(Win32Heap **)actual_block;
-	return (uint8_t *)HeapReAlloc(win32_heap->handle, 0, actual_block, p_size + ALLOC_HEADER_SIZE) + ALLOC_HEADER_SIZE;
+	void *block = HeapReAlloc(win32_heap->handle, 0, actual_block, p_size + ALLOC_HEADER_SIZE);
+	// A failed realloc retains the original allocation and its heap reference.
+	return block != nullptr ? (uint8_t *)block + ALLOC_HEADER_SIZE : nullptr;
 }
 
 void godot_nir_free(void *p_block) {

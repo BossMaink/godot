@@ -1228,7 +1228,10 @@ void CSharpLanguage::_instance_binding_free_callback(void *, void *, void *p_bin
 
 		CSharpScriptBinding &script_binding = data->value();
 
-		if (script_binding.inited) {
+		// Finalizer-side release uses the same mutex. Do not call into managed code
+		// after that path (or a failed weak/strong swap) has released the handle.
+		MutexLock release_lock(csharp_lang->script_gchandle_release_mutex);
+		if (script_binding.inited && !script_binding.gchandle.is_released()) {
 			// Set the native instance field to IntPtr.Zero, if not yet garbage collected.
 			// This is done to avoid trying to dispose the native instance from Dispose(bool).
 			GDMonoCache::managed_callbacks.ScriptManagerBridge_SetGodotObjectPtr(
@@ -1258,6 +1261,9 @@ GDExtensionBool CSharpLanguage::_instance_binding_reference_callback(void *p_tok
 	CRASH_COND(!rc_owner);
 #endif // DEBUG_ENABLED
 
+	// Serialize swaps with finalizer-side release. A failed swap releases the
+	// handle but keeps its WEAK_HANDLE type until a wrapper is recreated.
+	MutexLock release_lock(CSharpLanguage::get_singleton()->script_gchandle_release_mutex);
 	MonoGCHandleData &gchandle = script_binding.gchandle;
 
 	int refcount = rc_owner->get_reference_count();
@@ -1268,7 +1274,7 @@ GDExtensionBool CSharpLanguage::_instance_binding_reference_callback(void *p_tok
 
 	if (p_reference) {
 		// Refcount incremented
-		if (refcount > 1 && gchandle.is_weak()) { // The managed side also holds a reference, hence 1 instead of 0
+		if (refcount > 1 && !gchandle.is_released() && gchandle.is_weak()) { // The managed side also holds a reference, hence 1 instead of 0
 			// The reference count was increased after the managed side was the only one referencing our owner.
 			// This means the owner is being referenced again by the unmanaged side,
 			// so the owner must hold the managed side alive again to avoid it from being GCed.
