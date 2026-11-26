@@ -4963,7 +4963,30 @@ static uint64_t navigation_process_max = 0;
 // Return false means iterating further, returning true means `OS::run`
 // will terminate the program. In case of failure, the OS exit code needs
 // to be set explicitly here (defaults to EXIT_SUCCESS).
+bool Main::_supports_world_execution() {
+	return !editor && !project_manager && !movie_writer;
+}
+
 bool Main::iteration() {
+	SceneTree *tree = SceneTree::get_singleton();
+	if (tree && tree->_has_world_execution()) {
+		const uint64_t before = Engine::get_singleton()->get_process_frames();
+		const bool exit = tree->_drive_world_execution();
+		// Real time spent on a batch must not become catch-up time on release.
+		const uint64_t now = OS::get_singleton()->get_ticks_usec();
+		main_timer_sync.init(now);
+		last_ticks = now;
+		if (!exit && Engine::get_singleton()->get_process_frames() == before) {
+			OS::get_singleton()->add_frame_delay(DisplayServer::get_singleton()->window_can_draw(), tree->is_accessibility_enabled());
+		}
+		return exit;
+	}
+	return _iteration(false, true);
+}
+
+// One original frame body: servers, scene callbacks, timers, deferred messages,
+// language/audio updates and frame identities are never reimplemented by a host.
+bool Main::_iteration(bool p_explicit_world_frame, bool p_present_world_frame) {
 	GodotProfileZone("Main::iteration");
 	GodotProfileZoneGroupedFirst(_profile_zone, "prepare");
 	iterating++;
@@ -4980,7 +5003,13 @@ bool Main::iteration() {
 
 	const double time_scale = Engine::get_singleton()->get_effective_time_scale();
 
-	MainFrameTime advance = main_timer_sync.advance(physics_step, physics_ticks_per_second);
+	MainFrameTime advance;
+	if (p_explicit_world_frame) {
+		// Exactly one existing fixed tick, not a large-delta physics substitute.
+		advance = { physics_step, 1, 0.0 };
+	} else {
+		advance = main_timer_sync.advance(physics_step, physics_ticks_per_second);
+	}
 	double process_step = advance.process_step;
 	double scaled_step = process_step * time_scale;
 
@@ -5127,13 +5156,17 @@ bool Main::iteration() {
 #else
 	const bool has_pending_resources_for_processing = false;
 #endif // RD_ENABLED
-	bool wants_present = (DisplayServer::get_singleton()->can_any_window_draw() ||
+	SceneTree *render_tree = SceneTree::get_singleton();
+	const bool requested_world_render = render_tree && render_tree->_take_world_render_request();
+	bool wants_present = p_present_world_frame && (DisplayServer::get_singleton()->can_any_window_draw() ||
 								 DisplayServer::get_singleton()->has_additional_outputs()) &&
 			RenderingServer::get_singleton()->is_render_loop_enabled();
 
-	if (wants_present || has_pending_resources_for_processing) {
-		wants_present |= force_redraw_requested;
-		if ((!force_redraw_requested) && OS::get_singleton()->is_in_low_processor_usage_mode()) {
+	if (wants_present || has_pending_resources_for_processing || requested_world_render) {
+		if (p_present_world_frame) {
+			wants_present |= force_redraw_requested;
+		}
+		if ((!force_redraw_requested) && !requested_world_render && OS::get_singleton()->is_in_low_processor_usage_mode()) {
 			if (RenderingServer::get_singleton()->has_changed()) {
 				RenderingServer::get_singleton()->draw(wants_present, scaled_step); // flush visual commands
 				Engine::get_singleton()->increment_frames_drawn();
@@ -5141,7 +5174,9 @@ bool Main::iteration() {
 		} else {
 			RenderingServer::get_singleton()->draw(wants_present, scaled_step); // flush visual commands
 			Engine::get_singleton()->increment_frames_drawn();
-			force_redraw_requested = false;
+			if (p_present_world_frame) {
+				force_redraw_requested = false;
+			}
 		}
 	}
 
@@ -5216,7 +5251,7 @@ bool Main::iteration() {
 	}
 #endif
 
-	if (fixed_fps != -1) {
+	if (p_explicit_world_frame || fixed_fps != -1) {
 		return exit;
 	}
 

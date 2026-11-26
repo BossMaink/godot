@@ -57,6 +57,9 @@ class Main {
 	static uint32_t frame;
 	static bool force_redraw_requested;
 	static int iterating;
+	friend class SceneTree;
+	static bool _iteration(bool p_explicit_world_frame, bool p_present_world_frame);
+	static bool _supports_world_execution();
 
 public:
 	static bool is_cmdline_tool();

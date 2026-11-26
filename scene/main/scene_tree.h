@@ -228,6 +228,16 @@ private:
 	bool multiplayer_poll = true;
 
 	static SceneTree *singleton;
+	friend class Main;
+	int64_t world_execution_generation = 0;
+	int64_t world_execution_token = 0;
+	ObjectID world_execution_owner;
+	Callable world_execution_driver;
+	bool world_execution_driver_running = false;
+	bool world_render_requested = false;
+	bool _take_world_render_request();
+	bool _has_world_execution();
+	bool _drive_world_execution();
 	friend class Node;
 
 	void tree_changed();
@@ -345,6 +355,15 @@ public:
 	void _accessibility_notify_change(const Node *p_node, bool p_remove = false);
 	void _flush_accessibility_changes();
 	void _process_accessibility_changes(int p_window_id); // Effectively DisplayServerEnums::WindowID
+
+	// Whole-tree execution ownership. Ordinary Main and owned ticks execute
+	// the same complete frame body, including native scene timers and queues.
+	int64_t acquire_world_execution(Node *p_owner, const Callable &p_driver);
+	bool advance_world_execution(int64_t p_token, bool p_present);
+	void release_world_execution(int64_t p_token);
+	bool is_world_execution_current(int64_t p_token) const;
+	void request_world_render();
+	bool has_world_render_request() const;
 
 	virtual void initialize() override;
 

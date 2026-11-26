@@ -41,6 +41,7 @@ STATIC_ASSERT_INCOMPLETE_TYPE(class, RenderingServer);
 #include "core/object/class_db.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
+#include "main/main.h"
 #include "core/profiling/profiling.h"
 #include "scene/animation/tween.h"
 #include "scene/audio/audio_stream_player.h"
@@ -158,6 +159,9 @@ void SceneTree::node_added(Node *p_node) {
 }
 
 void SceneTree::node_removed(Node *p_node) {
+	if (p_node->get_instance_id() == world_execution_owner) {
+		release_world_execution(world_execution_token);
+	}
 	// Nodes can only be removed from the main thread.
 	if (current_scene == p_node) {
 		current_scene = nullptr;
@@ -854,6 +858,7 @@ void SceneTree::process_tweens(double p_delta, bool p_physics) {
 }
 
 void SceneTree::finalize() {
+	release_world_execution(world_execution_token);
 	_flush_delete_queue();
 
 	_flush_ugc();
@@ -1914,7 +1919,101 @@ bool SceneTree::is_multiplayer_poll_enabled() const {
 	return multiplayer_poll;
 }
 
+void SceneTree::request_world_render() {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "World rendering requests require the main thread.");
+	world_render_requested = true;
+}
+
+bool SceneTree::has_world_render_request() const {
+	ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), false, "World rendering requests require the main thread.");
+	return world_render_requested;
+}
+
+bool SceneTree::_take_world_render_request() {
+	const bool requested = world_render_requested;
+	world_render_requested = false;
+	return requested;
+}
+
+int64_t SceneTree::acquire_world_execution(Node *p_owner, const Callable &p_driver) {
+	ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), 0, "World execution requires the main thread.");
+	ERR_FAIL_COND_V_MSG(!Main::_supports_world_execution(), 0, "World execution is unavailable in editor, project manager or movie capture.");
+	ERR_FAIL_COND_V_MSG(OS::get_singleton()->get_main_loop() != this || _quit, 0, "World execution requires the current live SceneTree.");
+	ERR_FAIL_COND_V_MSG(world_execution_token != 0 || world_execution_driver_running, 0, "World execution already has an owner.");
+	ERR_FAIL_NULL_V(p_owner, 0);
+	ERR_FAIL_COND_V_MSG(!p_owner->is_inside_tree() || p_owner->get_tree() != this || p_owner->is_queued_for_deletion(), 0, "World execution requires a live owner in this tree.");
+	ERR_FAIL_COND_V_MSG(!p_driver.is_valid() || world_execution_generation == INT64_MAX, 0, "Invalid world driver or exhausted token generation.");
+	world_execution_owner = p_owner->get_instance_id();
+	world_execution_driver = p_driver;
+	world_execution_token = ++world_execution_generation;
+	return world_execution_token;
+}
+
+bool SceneTree::is_world_execution_current(int64_t p_token) const {
+	ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), false, "World execution requires the main thread.");
+	if (p_token == 0 || p_token != world_execution_token || _quit || OS::get_singleton()->get_main_loop() != this) {
+		return false;
+	}
+	Node *owner = Object::cast_to<Node>(ObjectDB::get_instance(world_execution_owner));
+	return owner && owner->is_inside_tree() && owner->get_tree() == this && !owner->is_queued_for_deletion();
+}
+
+void SceneTree::release_world_execution(int64_t p_token) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "World execution requires the main thread.");
+	if (p_token == 0 || p_token != world_execution_token) {
+		return; // A late release cannot revoke the successor's ownership.
+	}
+	world_execution_token = 0;
+	world_execution_owner = ObjectID();
+	world_execution_driver = Callable();
+}
+
+bool SceneTree::_has_world_execution() {
+	if (world_execution_token == 0) {
+		return false;
+	}
+	if (!is_world_execution_current(world_execution_token)) {
+		release_world_execution(world_execution_token);
+		return false;
+	}
+	return true;
+}
+
+bool SceneTree::_drive_world_execution() {
+	ERR_FAIL_COND_V_MSG(world_execution_driver_running || Main::is_iterating(), true, "World drivers cannot reenter the frame loop.");
+	if (!_has_world_execution()) {
+		return _quit;
+	}
+	// Keep a local copy: a step can release ownership or remove its owner.
+	const Callable driver = world_execution_driver;
+	world_execution_driver_running = true;
+	Callable::CallError error;
+	Variant result;
+	driver.callp(nullptr, 0, result, error);
+	world_execution_driver_running = false;
+	if (error.error != Callable::CallError::CALL_OK) {
+		release_world_execution(world_execution_token);
+		ERR_PRINT("World driver failed; stopping instead of resuming a partial world.");
+		quit(EXIT_FAILURE);
+	}
+	return _quit;
+}
+
+bool SceneTree::advance_world_execution(int64_t p_token, bool p_present) {
+	ERR_FAIL_COND_V_MSG(!Thread::is_main_thread(), false, "World execution requires the main thread.");
+	ERR_FAIL_COND_V_MSG(!world_execution_driver_running || Main::is_iterating(), false, "Advance is allowed only at the exclusive driver boundary, never from a world callback.");
+	ERR_FAIL_COND_V_MSG(!is_world_execution_current(p_token), false, "Stale or unavailable world execution owner.");
+	_quit |= Main::_iteration(true, p_present);
+	return !_quit;
+}
+
 void SceneTree::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("request_world_render"), &SceneTree::request_world_render);
+	ClassDB::bind_method(D_METHOD("has_world_render_request"), &SceneTree::has_world_render_request);
+	ClassDB::bind_method(D_METHOD("acquire_world_execution", "owner", "driver"), &SceneTree::acquire_world_execution);
+	ClassDB::bind_method(D_METHOD("advance_world_execution", "token", "present"), &SceneTree::advance_world_execution);
+	ClassDB::bind_method(D_METHOD("release_world_execution", "token"), &SceneTree::release_world_execution);
+	ClassDB::bind_method(D_METHOD("is_world_execution_current", "token"), &SceneTree::is_world_execution_current);
 	ClassDB::bind_method(D_METHOD("get_root"), &SceneTree::get_root);
 	ClassDB::bind_method(D_METHOD("has_group", "name"), &SceneTree::has_group);
 

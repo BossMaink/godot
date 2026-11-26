@@ -13,6 +13,48 @@
 		<link title="Multiple resolutions">$DOCS_URL/tutorials/rendering/multiple_resolutions.html</link>
 	</tutorials>
 	<methods>
+		<method name="request_world_render">
+			<return type="void" />
+			<description>
+				Requests the existing rendering stage of the current or next native frame, including [signal RenderingServer.frame_post_draw]. Multiple requests coalesce. This does not advance another world frame or force window presentation. Main-thread resource and capture owners request this after subscribing for a draw.
+			</description>
+		</method>
+		<method name="has_world_render_request" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns whether the native rendering stage has a pending explicit draw request. Presentation publishers can prepare their original view before that stage while an accelerated world suppresses window presentation. Main thread only.
+			</description>
+		</method>
+		<method name="acquire_world_execution">
+			<return type="int" />
+			<param index="0" name="owner" type="Node" />
+			<param index="1" name="driver" type="Callable" />
+			<description>
+				Acquires exclusive whole-tree frame driving on the main thread. The driver runs at the next outer frame boundary. Returns a generation token, or zero when rejected. Editor, project manager and movie capture are unsupported. Removing the owner revokes the token.
+			</description>
+		</method>
+		<method name="advance_world_execution">
+			<return type="bool" />
+			<param index="0" name="token" type="int" />
+			<param index="1" name="present" type="bool" />
+			<description>
+				Runs exactly one existing fixed physics tick and a matching process tick through the ordinary complete frame body, including servers, messages, timers, language and audio updates. Valid only inside the exclusive driver callback. Returns false on rejection or when the tree requests exit. It does not authorize event skipping or promise a future world interval. Both paced and accelerated owners use this method; [param present] controls presentation frequency only. Pending renderer resource work retains its original flush even when presentation is suppressed.
+			</description>
+		</method>
+		<method name="is_world_execution_current" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="token" type="int" />
+			<description>
+				Returns whether the live current tree still owns this generation token.
+			</description>
+		</method>
+		<method name="release_world_execution">
+			<return type="void" />
+			<param index="0" name="token" type="int" />
+			<description>
+				Releases this generation without changing the tree's paused state. Stale tokens cannot release a successor. The current frame finishes before ordinary driving resumes at the next outer boundary.
+			</description>
+		</method>
 		<method name="call_group" qualifiers="vararg">
 			<return type="void" />
 			<param index="0" name="group" type="StringName" />
